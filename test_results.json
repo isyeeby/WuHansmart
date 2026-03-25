@@ -1,0 +1,146 @@
+[
+  {
+    "module": "健康检查",
+    "test": "根路径 API 信息",
+    "passed": true,
+    "response_time": 2048.5832691192627,
+    "error": null,
+    "details": "消息：欢迎使用民宿价格数据分析系统API"
+  },
+  {
+    "module": "健康检查",
+    "test": "服务健康状态",
+    "passed": true,
+    "response_time": 8773.411750793457,
+    "error": null,
+    "details": "状态：healthy"
+  },
+  {
+    "module": "认证",
+    "test": "用户登录",
+    "passed": true,
+    "response_time": 2611.604690551758,
+    "error": null,
+    "details": "Token 前 20 位：eyJhbGciOiJIUzI1NiIs..."
+  },
+  {
+    "module": "认证",
+    "test": "无效凭证拒绝",
+    "passed": false,
+    "response_time": 2033.5466861724854,
+    "error": null,
+    "details": ""
+  },
+  {
+    "module": "用户",
+    "test": "获取当前用户信息",
+    "passed": true,
+    "response_time": 2022.646188735962,
+    "error": null,
+    "details": "ID=21, 手机=13800138000"
+  },
+  {
+    "module": "用户",
+    "test": "更新用户信息",
+    "passed": false,
+    "response_time": 2029.7234058380127,
+    "error": null,
+    "details": "可能未实现或数据格式问题"
+  },
+  {
+    "module": "房源",
+    "test": "房源列表查询",
+    "passed": true,
+    "response_time": 2177.8581142425537,
+    "error": null,
+    "details": "返回0套房源"
+  },
+  {
+    "module": "房源",
+    "test": "房源详情查询",
+    "passed": false,
+    "response_time": 2025.8564949035645,
+    "error": null,
+    "details": "响应数据类型：str"
+  },
+  {
+    "module": "房源",
+    "test": "房源标签查询",
+    "passed": false,
+    "response_time": 2011.1219882965088,
+    "error": null,
+    "details": "标签数量：N/A"
+  },
+  {
+    "module": "收藏",
+    "test": "获取收藏列表",
+    "passed": true,
+    "response_time": 2023.2512950897217,
+    "error": null,
+    "details": "已收藏2套房源"
+  },
+  {
+    "module": "预测",
+    "test": "基础价格预测",
+    "passed": false,
+    "response_time": 2013.416051864624,
+    "error": "状态码不匹配：期望200, 实际404",
+    "details": ""
+  },
+  {
+    "module": "预测",
+    "test": "高级价格预测",
+    "passed": false,
+    "response_time": 2035.5594158172607,
+    "error": null,
+    "details": "响应：状态码不匹配：期望200, 实际404"
+  },
+  {
+    "module": "看板",
+    "test": "Dashboard 统计数据",
+    "passed": false,
+    "response_time": 2017.0817375183105,
+    "error": null,
+    "details": ""
+  },
+  {
+    "module": "竞品",
+    "test": "竞品分析",
+    "passed": false,
+    "response_time": 2014.580249786377,
+    "error": null,
+    "details": "竞品数量：N/A"
+  },
+  {
+    "module": "我的房源",
+    "test": "获取我的房源列表",
+    "passed": true,
+    "response_time": 2034.348726272583,
+    "error": null,
+    "details": "拥有5套房源"
+  },
+  {
+    "module": "推荐",
+    "test": "相似房源推荐",
+    "passed": true,
+    "response_time": 8181.947469711304,
+    "error": null,
+    "details": "推荐数量：N/A"
+  },
+  {
+    "module": "推荐",
+    "test": "商机推荐",
+    "passed": false,
+    "response_time": 2012.6230716705322,
+    "error": null,
+    "details": "商机数量：N/A"
+  },
+  {
+    "module": "投资",
+    "test": "投资回报率计算",
+    "passed": false,
+    "response_time": 2026.2541770935059,
+    "error": null,
+    "details": ""
+  }
+]

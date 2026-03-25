@@ -1,0 +1,1460 @@
+"""
+Price prediction endpoints using XGBoost model.
+提供价格预测、14天预测、因子分解、特征重要性等功能。
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import Optional, List
+from datetime import datetime, timedelta
+from app.models.schemas import PredictionRequest, PredictionResponse
+from app.services.price_predictor import model_service
+from app.db.hive import execute_query_to_df
+from app.db.database import get_db, SessionLocal
+import logging
+import random
+import pandas as pd
+import numpy as np
+import math
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# 特征名称中英文映射
+FEATURE_NAME_MAP = {
+    # 房源基本属性
+    "bedrooms": "卧室数",
+    "bed_count": "床位数",
+    "capacity": "可住人数",
+    "area": "面积",
+    "bathrooms": "卫生间数",
+    "bedroom_count": "卧室数",
+    "area_sqm": "面积",
+    "room_type": "房型",
+    "house_type": "房屋类型",
+    # 位置特征
+    "district": "行政区",
+    "trade_area": "商圈",
+    "longitude": "经度",
+    "latitude": "纬度",
+    "district_encoded": "行政区编码",
+    "trade_area_encoded": "商圈编码",
+    # 评分与热度
+    "rating": "评分",
+    "favorite_count": "收藏数",
+    "heat_score": "热度",
+    "comment_count": "评论数",
+    # 设施特征 - 布尔型
+    "has_projector": "投影",
+    "projector": "投影",
+    "has_bathtub": "浴缸",
+    "bathtub": "浴缸",
+    "near_metro": "近地铁",
+    "near_subway": "近地铁",
+    "has_kitchen": "厨房",
+    "kitchen": "厨房",
+    "has_smart_lock": "智能锁",
+    "smart_lock": "智能锁",
+    "has_wifi": "WiFi",
+    "wifi": "WiFi",
+    "has_air_conditioning": "空调",
+    "ac": "空调",
+    "has_washer": "洗衣机",
+    "washer": "洗衣机",
+    "has_tv": "电视",
+    "tv": "电视",
+    "has_fridge": "冰箱",
+    "fridge": "冰箱",
+    "has_elevator": "电梯",
+    "elevator": "电梯",
+    "has_parking": "停车位",
+    "free_parking": "免费停车",
+    "paid_parking": "收费停车",
+    "has_view": "景观",
+    "view_type": "景观类型",
+    "has_terrace": "露台",
+    "terrace": "露台",
+    "has_mahjong": "麻将机",
+    "mahjong": "麻将机",
+    "has_gym": "健身房",
+    "has_pool": "游泳池",
+    "has_breakfast": "早餐",
+    "has_heater": "暖气",
+    "hot_water": "热水",
+    "has_tv": "电视",
+    "dry_wet_sep": "干湿分离",
+    "smart_toilet": "智能马桶",
+    "pet_friendly": "可带宠物",
+    "front_desk": "前台",
+    "butler": "管家服务",
+    "luggage": "行李寄存",
+    "instant_confirm": "即时确认",
+    "family_friendly": "亲子友好",
+    "business": "商务型",
+    # 景观细分
+    "river_view": "江景",
+    "lake_view": "湖景",
+    "mountain_view": "山景",
+    "city_view": "城市景观",
+    "garden": "花园",
+    "sunroom": "阳光房",
+    # 派生特征
+    "area_per_bedroom": "卧室平均面积",
+    "facility_count": "设施数量",
+    "is_large": "大户型",
+    "is_budget": "经济型",
+    "capacity_bedroom_ratio": "人均卧室数",
+    "has_luxury_amenities": "豪华设施",
+    # 目标编码特征
+    "dist_mean": "行政区均价",
+    "dist_median": "行政区中位数",
+    "dist_std": "行政区价格波动",
+    "dist_count": "行政区房源数",
+    # 时间特征
+    "is_weekend": "周末",
+    "is_holiday": "节假日",
+    "is_weekday": "工作日",
+    "distance_to_metro": "距地铁距离",
+    "distance_to_center": "距市中心距离",
+    # 编码特征前缀
+    "dist_": "商圈位置",
+    "room_": "房型类型",
+    "trade_": "商圈编码",
+    "style_": "装修风格",
+    "near_station": "近车站",
+    "near_university": "近高校",
+    "near_ski": "近滑雪",
+    "big_projector": "大屏投影",
+    "view_bathtub": "观景浴缸",
+    "karaoke": "K歌设备",
+    "oven": "烤箱",
+    "free_water": "免费饮水",
+    "style_modern": "现代风装修",
+    "style_ins": "Ins风装修",
+    "style_western": "西式装修",
+    "style_chinese": "中式装修",
+    "style_japanese": "日式装修",
+    "real_photo": "实拍验真",
+    "house_type_encoded": "房屋类型编码",
+    "cal_n_days": "日历覆盖天数",
+    "cal_mean": "日历均价",
+    "cal_std": "日历价格波动",
+    "cal_min": "日历最低价",
+    "cal_max": "日历最高价",
+    "cal_median": "日历价格中位数",
+    "cal_cv": "日历价格变异系数",
+    "cal_range_ratio": "日历价差比",
+    "cal_bookable_ratio": "日历可订比例",
+    "cal_weekend_premium": "日历周末溢价",
+}
+
+# 设施特征列表（用于相似度计算）
+FACILITY_FEATURES = [
+    "has_projector", "has_bathtub", "near_metro", "has_kitchen",
+    "has_smart_lock", "has_wifi", "has_air_conditioning", "has_washer",
+    "has_tv", "has_fridge", "has_elevator", "has_parking",
+    "has_view", "has_terrace", "has_mahjong"
+]
+
+
+def _get_feature_display_name(feature: str) -> str:
+    """
+    获取特征的中文名称
+
+    Args:
+        feature: 英文特征名
+
+    Returns:
+        中文显示名称
+    """
+    # 直接匹配
+    if feature in FEATURE_NAME_MAP:
+        return FEATURE_NAME_MAP[feature]
+
+    # 前缀匹配（如 dist_朝阳, room_entire）
+    for prefix, name in FEATURE_NAME_MAP.items():
+        if feature.startswith(prefix):
+            if prefix.endswith("_") and len(feature) > len(prefix):
+                suffix = feature[len(prefix) :]
+                return f"{name}（{suffix}）"
+            return name
+
+    # 未收录：避免裸英文轴标签
+    if feature.startswith("cal_"):
+        return f"日历特征·{feature[4:].replace('_', ' ')}"
+    if feature.startswith("style_"):
+        return f"装修风格·{feature[6:].replace('_', ' ')}"
+    return f"模型特征（{feature}）"
+
+
+def _calculate_confidence(predicted_price: float, district_avg: float, sample_count: int = 100) -> float:
+    """
+    计算预测置信度
+
+    基于以下因素计算：
+    1. 预测价格与商圈均价的偏差（偏差越小置信度越高）
+    2. 样本数量（样本越多置信度越高）
+
+    Args:
+        predicted_price: 预测价格
+        district_avg: 商圈均价
+        sample_count: 训练样本数量
+
+    Returns:
+        置信度 (0.5-0.95)
+    """
+    # 基于样本量的置信度分量
+    sample_confidence = min(1.0, sample_count / 500.0) * 0.3
+
+    # 基于预测偏差的置信度分量
+    if district_avg > 0:
+        deviation = abs(predicted_price - district_avg) / district_avg
+        deviation_confidence = max(0, 1.0 - deviation) * 0.5
+    else:
+        deviation_confidence = 0.3
+
+    # 基础置信度
+    base_confidence = 0.2
+
+    total = base_confidence + sample_confidence + deviation_confidence
+    return round(min(0.95, max(0.5, total)), 2)
+
+
+def _calculate_similarity(target: dict, competitor: dict) -> float:
+    """
+    计算两个房源的相似度（加权余弦相似度）
+
+    基于价格、评分、收藏数、面积、卧室数、床位数计算
+
+    Args:
+        target: 目标房源特征
+        competitor: 竞品房源特征
+
+    Returns:
+        相似度分数 (0-100)
+    """
+    # 特征及权重配置
+    # 价格和房型特征权重较高，收藏数和评分权重适中
+    feature_weights = {
+        'price': 0.25,           # 价格权重最高
+        'rating': 0.15,          # 评分
+        'favorite_count': 0.10,  # 收藏数
+        'area': 0.15,            # 面积
+        'bedroom_count': 0.15,   # 卧室数
+        'bed_count': 0.10,       # 床位数
+        'capacity': 0.10,        # 可住人数
+    }
+
+    vec1 = []
+    vec2 = []
+    weights = []
+
+    for f, w in feature_weights.items():
+        v1 = target.get(f, 0) or 0
+        v2 = competitor.get(f, 0) or 0
+        vec1.append(float(v1))
+        vec2.append(float(v2))
+        weights.append(w)
+
+    # 归一化向量
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    weights = np.array(weights)
+
+    # 加权归一化
+    vec1_weighted = vec1 * weights
+    vec2_weighted = vec2 * weights
+
+    norm1 = np.linalg.norm(vec1_weighted)
+    norm2 = np.linalg.norm(vec2_weighted)
+
+    if norm1 == 0 or norm2 == 0:
+        return 50.0  # 无法计算时返回中等相似度
+
+    # 余弦相似度
+    cosine_sim = np.dot(vec1, vec2) / (norm1 * norm2)
+
+    # 转换为0-100分数
+    similarity_score = (cosine_sim + 1) / 2 * 100
+
+    return round(max(0, min(100, similarity_score)), 1)
+
+
+@router.post("/reload-model")
+def reload_model():
+    """
+    重新加载模型（热重载）
+    """
+    try:
+        model_service.manager.reload_models()
+        return {"status": "success", "message": "Models reloaded successfully"}
+    except Exception as e:
+        logger.error(f"Failed to reload models: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to reload models: {str(e)}")
+
+
+# =============================================================================
+# 新增：价格预测接口（文档定义）
+# =============================================================================
+
+@router.post("/price")
+def predict_listing_price(request: dict):
+    """
+    价格预测
+
+    输入房源特征，预测合理价格区间
+    """
+    try:
+        # 从请求中提取特征
+        district = request.get("district", "")
+        trade_area = request.get("trade_area") or district  # 商圈（如果没有则使用行政区）
+        bedroom_count = request.get("bedroom_count", 1)
+        bed_count = request.get("bed_count", bedroom_count)  # 默认用卧室数
+        bathroom_count = request.get("bathroom_count", 1)
+        area = request.get("area", 50)
+        capacity = request.get("capacity", bed_count * 2)  # 默认床位数*2
+
+        # 设施标签
+        has_metro = request.get("has_metro", False)
+        has_kitchen = request.get("has_kitchen", False)
+        has_projector = request.get("has_projector", False)
+        has_washer = request.get("has_washer", False)
+        has_smart_lock = request.get("has_smart_lock", False)
+        has_air_conditioner = request.get("has_air_conditioner", True)
+        has_bathtub = request.get("has_bathtub", False)
+        has_tv = request.get("has_tv", False)
+        has_heater = request.get("has_heater", False)
+        near_metro = request.get("near_metro", False)
+        has_elevator = request.get("has_elevator", False)
+        has_fridge = request.get("has_fridge", False)
+        has_view = request.get("has_view", False)
+        has_terrace = request.get("has_terrace", False)
+        has_mahjong = request.get("has_mahjong", False)
+        has_big_living_room = request.get("has_big_living_room", False)
+        has_parking = request.get("has_parking", False)
+        pet_friendly = request.get("pet_friendly", False)
+
+        # 景观特色
+        view_type = request.get("view_type", "")
+        river_view = request.get("river_view", False) or ("江景" in view_type)
+        lake_view = request.get("lake_view", False) or ("湖景" in view_type)
+        mountain_view = request.get("mountain_view", False) or ("山景" in view_type)
+        garden = request.get("garden", False)
+
+        # 构建预测请求
+        pred_request = PredictionRequest(
+            district=district,
+            trade_area=trade_area,  # 商圈特征
+            unit_id=request.get("unit_id") or request.get("unitId"),
+            room_type="整套房源" if bedroom_count >= 1 else "独立房间",
+            capacity=capacity,
+            bedrooms=bedroom_count,
+            bed_count=bed_count,
+            bathrooms=bathroom_count,
+            area=area,
+            has_wifi=True,
+            has_kitchen=has_kitchen,
+            has_air_conditioning=has_air_conditioner,
+            has_projector=has_projector,
+            has_bathtub=has_bathtub,
+            has_washer=has_washer,
+            has_smart_lock=has_smart_lock,
+            has_tv=has_tv,
+            has_heater=has_heater,
+            near_metro=near_metro or has_metro,
+            has_elevator=has_elevator,
+            has_fridge=has_fridge,
+            has_view=has_view or river_view or lake_view or mountain_view,
+            view_type=view_type,
+            has_terrace=has_terrace,
+            has_mahjong=has_mahjong,
+            has_big_living_room=has_big_living_room,
+            has_parking=has_parking,
+        )
+
+        # 使用模型预测价格（模型已经考虑了所有设施因素）
+        predicted_price = model_service.predict(pred_request)
+        logger.info(f"预测结果 - district: {district}, area: {area}, bedroom_count: {bedroom_count}, predicted_price: {predicted_price}")
+
+        # 计算价格区间
+        lower = round(predicted_price * 0.88, 2)
+        upper = round(predicted_price * 1.12, 2)
+
+        # 获取商圈均价
+        district_avg = _get_district_average(district) or 200
+
+        # 计算影响因素（仅用于展示，不再修改预测价格）
+        factors = []
+
+        if district:
+            factors.append({
+                "feature": "行政区",
+                "impact": f"+{round((district_avg - 200) / 200 * 100, 0)}%" if district_avg > 200 else f"{round((district_avg - 200) / 200 * 100, 0)}%",
+                "detail": f"{district}均价{'较高' if district_avg > 200 else '适中'}"
+            })
+
+        if near_metro or has_metro:
+            factors.append({
+                "feature": "近地铁",
+                "impact": "已计入",
+                "detail": "交通便利溢价已包含在预测价格中"
+            })
+
+        if has_projector:
+            factors.append({
+                "feature": "投影",
+                "impact": "已计入",
+                "detail": "热门设施溢价已包含在预测价格中"
+            })
+
+        if has_bathtub:
+            factors.append({
+                "feature": "浴缸",
+                "impact": "已计入",
+                "detail": "品质设施溢价已包含在预测价格中"
+            })
+
+        if river_view or lake_view:
+            factors.append({
+                "feature": "景观房",
+                "impact": "已计入",
+                "detail": "景观溢价已包含在预测价格中"
+            })
+
+        if has_terrace:
+            factors.append({
+                "feature": "观景露台",
+                "impact": "已计入",
+                "detail": "露台溢价已包含在预测价格中"
+            })
+
+        return {
+            "predicted_price": round(predicted_price, 2),
+            "price_range": {
+                "lower": lower,
+                "upper": upper
+            },
+            "confidence": _calculate_confidence(predicted_price, district_avg),
+            "factors": factors[:5],
+            "district_avg_price": district_avg
+        }
+
+    except Exception as e:
+        logger.error(f"Error in predict_listing_price: {e}")
+        raise HTTPException(status_code=500, detail=f"预测失败: {str(e)}")
+
+
+@router.get("/competitors/{unit_id}")
+def get_competitors_analysis(
+    unit_id: str,
+    limit: int = Query(10, ge=1, le=20, description="数量限制"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取竞品分析
+    
+    获取指定房源的同商圈竞品分析
+    """
+    from app.db.database import Listing
+    
+    # 获取目标房源
+    target = db.query(Listing).filter(Listing.unit_id == unit_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="房源不存在")
+    
+    # 获取同商圈房源作为竞品
+    competitors_query = db.query(Listing).filter(
+        Listing.district == target.district,
+        Listing.unit_id != unit_id
+    ).order_by(Listing.favorite_count.desc()).limit(limit)
+    
+    competitors = competitors_query.all()
+    
+    # 获取市场分析
+    all_prices = [float(c.final_price) if c.final_price is not None else 0.0 for c in competitors]  # type: ignore
+    all_ratings = [float(c.rating) if c.rating is not None else 0.0 for c in competitors]  # type: ignore
+
+    target_price = float(target.final_price) if target.final_price is not None else 0.0  # type: ignore
+    sorted_prices = sorted(all_prices)
+    price_rank = sum(1 for p in sorted_prices if p < target_price) + 1 if sorted_prices else 1
+
+    # 构建竞品列表
+    competitors_list = []
+    target_features = {
+        "price": target_price,
+        "rating": float(target.rating) if target.rating is not None else 0.0,
+        "favorite_count": int(target.favorite_count) if target.favorite_count is not None else 0
+    }
+
+    for c in competitors:
+        c_price = float(c.final_price) if c.final_price is not None else 0.0  # type: ignore
+        c_rating = float(c.rating) if c.rating is not None else 0.0  # type: ignore
+        c_fav = int(c.favorite_count) if c.favorite_count is not None else 0  # type: ignore
+
+        competitor_features = {
+            "price": c_price,
+            "rating": c_rating,
+            "favorite_count": c_fav
+        }
+
+        competitors_list.append({
+            "unit_id": c.unit_id,
+            "title": c.title,
+            "price": c_price,
+            "rating": c_rating,
+            "favorite_count": c_fav,
+            "house_tags": c.house_tags,
+            "similarity_score": _calculate_similarity(target_features, competitor_features),
+            "price_diff": round(c_price - target_price, 2)
+        })
+
+    return {
+        "target_listing": {
+            "unit_id": target.unit_id,
+            "title": target.title,
+            "price": target_price,
+            "rating": float(target.rating) if target.rating is not None else 0.0  # type: ignore
+        },
+        "competitors": competitors_list,
+        "market_analysis": {
+            "avg_price": round(sum(all_prices) / len(all_prices), 2) if all_prices else 0,
+            "min_price": min(all_prices) if all_prices else 0,
+            "max_price": max(all_prices) if all_prices else 0,
+            "avg_rating": round(sum(all_ratings) / len(all_ratings), 2) if all_ratings else 0,
+            "total_competitors": len(competitors)
+        },
+        "position": {
+            "price_rank": price_rank,
+            "price_percentile": round(price_rank / len(sorted_prices) * 100, 1) if sorted_prices else 50,
+            "rating_rank": 0
+        }
+    }
+
+
+@router.post("/", response_model=PredictionResponse)
+def predict_price(request: PredictionRequest):
+    """
+    Predict the price of a homestay listing based on its features.
+    Uses the XGBoost model trained on Hive data.
+    """
+    try:
+        predicted_price = model_service.predict(request)
+
+        # Calculate confidence interval (e.g., +/- 15%)
+        lower_bound = round(predicted_price * 0.85, 2)
+        upper_bound = round(predicted_price * 1.15, 2)
+
+        # Get district average for context
+        district_avg = _get_district_average(request.district)
+
+        # Generate pricing suggestion
+        suggestion = _generate_suggestion(predicted_price, district_avg, request)
+
+        return PredictionResponse(
+            predicted_price=predicted_price,
+            confidence_interval=[lower_bound, upper_bound],
+            features_used=request.model_dump(),
+            district_avg=district_avg,
+            suggestion=suggestion
+        )
+    except Exception as e:
+        logger.error(f"Error predicting price: {e}")
+        raise HTTPException(status_code=500, detail=f"预测失败: {str(e)}")
+
+
+@router.get("/quick")
+def quick_predict(
+    district: str = Query(..., description="商圈"),
+    room_type: str = Query(..., description="房型"),
+    capacity: int = Query(..., ge=1, le=20, description="可住人数"),
+    bedrooms: int = Query(..., ge=0, description="卧室数"),
+    has_wifi: bool = Query(True, description="是否有WiFi"),
+    is_weekend: bool = Query(False, description="是否周末"),
+    unit_id: Optional[str] = Query(None, description="平台房源ID，用于加载价格日历特征"),
+):
+    """
+    Quick price prediction using query parameters (GET method).
+    Simplified version for quick estimates.
+    """
+    request = PredictionRequest(
+        district=district,
+        room_type=room_type,
+        capacity=capacity,
+        bedrooms=bedrooms,
+        bed_count=1,
+        bathrooms=1,
+        area=50,
+        has_wifi=has_wifi,
+        is_weekend=is_weekend,
+        unit_id=unit_id,
+    )
+
+    try:
+        predicted_price = model_service.predict(request)
+        return {
+            "predicted_price": predicted_price,
+            "district": district,
+            "currency": "CNY"
+        }
+    except Exception as e:
+        logger.error(f"Error in quick predict: {e}")
+        raise HTTPException(status_code=500, detail="预测失败")
+
+
+@router.get("/district-average/{district}")
+def get_district_average_price(district: str):
+    """
+    Get average price for a specific district.
+    """
+    avg_price = _get_district_average(district)
+    if avg_price is None:
+        raise HTTPException(status_code=404, detail=f"未找到行政区: {district}")
+
+    return {
+        "district": district,
+        "average_price": avg_price,
+        "sample_size": 100  # Would come from actual query
+    }
+
+
+def _get_district_average(district: str) -> Optional[float]:
+    """
+    Helper function to get district average price from MySQL (真实数据).
+    """
+    from app.db.database import SessionLocal, Listing
+    
+    db = SessionLocal()
+    try:
+        # 从MySQL获取真实数据
+        result = db.query(Listing).filter(
+            Listing.district == district,
+            Listing.final_price.isnot(None)
+        ).all()
+        
+        if result:
+            prices = [float(l.final_price) for l in result if l.final_price is not None]  # type: ignore
+            if prices:
+                avg_price = sum(prices) / len(prices)
+                logger.info(f"从MySQL获取{district}均价: {avg_price:.2f}元 (样本数: {len(prices)})")
+                return round(avg_price, 2)
+        
+        logger.warning(f"MySQL中未找到商圈 {district} 的价格数据")
+        return None
+        
+    except Exception as e:
+        logger.error(f"获取商圈均价失败: {e}")
+        return None
+    finally:
+        db.close()
+
+
+def _generate_suggestion(predicted_price: float,
+                         district_avg: Optional[float],
+                         request: PredictionRequest) -> str:
+    """
+    Generate a pricing suggestion based on prediction and market context.
+    """
+    if district_avg is None:
+        return "建议参考周边同类房源定价"
+
+    diff_percent = (predicted_price - district_avg) / district_avg
+
+    if diff_percent > 0.2:
+        return f"预测价格高于{district_avg:.0f}元商圈均价{diff_percent*100:.0f}%，建议确认房源特色是否支撑这一定价"
+    elif diff_percent > 0.05:
+        return f"预测价格略高于商圈均价，适合有特色的精品房源"
+    elif diff_percent > -0.05:
+        return "预测价格与商圈均价持平，具有竞争力"
+    elif diff_percent > -0.2:
+        return f"预测价格低于商圈均价，可考虑适当提价或检查房源条件"
+    else:
+        return f"预测价格显著低于商圈均价，建议检查是否有未录入的房源优势"
+
+
+@router.post("/batch")
+def batch_predict(requests: List[PredictionRequest]):
+    """
+    Batch price prediction for multiple listings.
+    """
+    results = []
+    for request in requests:
+        try:
+            price = model_service.predict(request)
+            results.append({
+                "district": request.district,
+                "predicted_price": price,
+                "status": "success"
+            })
+        except Exception as e:
+            results.append({
+                "district": request.district,
+                "error": str(e),
+                "status": "failed"
+            })
+
+    return {"results": results, "total": len(results), "successful": sum(1 for r in results if r["status"] == "success")}
+
+
+# =============================================================================
+# 新增：14天价格预测
+# =============================================================================
+
+@router.get("/forecast")
+def price_forecast(
+    district: str = Query(..., description="行政区"),
+    trade_area: str = Query(None, description="商圈（更精细的位置）"),
+    room_type: str = Query(..., description="房型"),
+    capacity: int = Query(..., ge=1, le=20, description="可住人数"),
+    bedrooms: int = Query(..., ge=0, description="卧室数"),
+    bed_count: int = Query(1, ge=1, description="床位数"),
+    area: int = Query(50, ge=10, le=500, description="面积"),
+    has_wifi: bool = Query(True, description="WiFi"),
+    has_air_conditioning: bool = Query(True, description="空调"),
+    has_kitchen: bool = Query(False, description="厨房"),
+    has_projector: bool = Query(False, description="投影"),
+    has_bathtub: bool = Query(False, description="浴缸"),
+    has_washer: bool = Query(False, description="洗衣机"),
+    has_smart_lock: bool = Query(False, description="智能锁"),
+    has_tv: bool = Query(False, description="电视"),
+    has_heater: bool = Query(False, description="暖气"),
+    near_metro: bool = Query(False, description="近地铁"),
+    has_elevator: bool = Query(False, description="电梯"),
+    has_fridge: bool = Query(False, description="冰箱"),
+    has_view: bool = Query(False, description="景观房"),
+    has_terrace: bool = Query(False, description="观景露台"),
+    has_mahjong: bool = Query(False, description="麻将机"),
+    has_big_living_room: bool = Query(False, description="大客厅"),
+    base_price: Optional[float] = Query(None, description="当前定价（可选）"),
+    unit_id: Optional[str] = Query(None, description="平台房源ID，用于 XGBoost 基准价（价格日历特征）"),
+):
+    """
+    14天价格预测
+
+    基于周末/节假日因素和市场供需规律，预测未来14天的建议价格
+    """
+    try:
+        # 基础价格
+        if base_price is None:
+            base_request = PredictionRequest(
+                district=district,
+                trade_area=trade_area or district,
+                room_type=room_type,
+                capacity=capacity,
+                bedrooms=bedrooms,
+                bed_count=bed_count,
+                bathrooms=1,
+                area=area,
+                has_wifi=has_wifi,
+                has_air_conditioning=has_air_conditioning,
+                has_kitchen=has_kitchen,
+                has_projector=has_projector,
+                has_bathtub=has_bathtub,
+                has_washer=has_washer,
+                has_smart_lock=has_smart_lock,
+                has_tv=has_tv,
+                has_heater=has_heater,
+                near_metro=near_metro,
+                has_elevator=has_elevator,
+                has_fridge=has_fridge,
+                has_view=has_view,
+                has_terrace=has_terrace,
+                has_mahjong=has_mahjong,
+                has_big_living_room=has_big_living_room,
+                unit_id=unit_id,
+            )
+            base_price = model_service.predict(base_request)
+
+        forecasts = []
+        today = datetime.now()
+
+        # 2026年节假日（硬编码，实际应该从配置或API获取）
+        holidays = {
+            "2026-04-04": "清明节",
+            "2026-04-05": "清明节",
+            "2026-04-06": "清明节",
+            "2026-05-01": "劳动节",
+            "2026-05-02": "劳动节",
+            "2026-05-03": "劳动节",
+            "2026-05-04": "劳动节",
+            "2026-05-05": "劳动节",
+            "2026-06-19": "端午节",
+            "2026-06-20": "端午节",
+            "2026-06-21": "端午节",
+            "2026-10-01": "国庆节",
+            "2026-10-02": "国庆节",
+            "2026-10-03": "国庆节",
+            "2026-10-04": "国庆节",
+            "2026-10-05": "国庆节",
+            "2026-10-06": "国庆节",
+            "2026-10-07": "国庆节",
+            "2026-10-08": "国庆节",
+        }
+
+        # 使用固定种子保证结果稳定（基于房型特征）
+        seed_value = hash(f"{district}{bedrooms}{capacity}") % 10000
+        rng = random.Random(seed_value)
+
+        for i in range(14):
+            date = today + timedelta(days=i)
+            date_str = date.strftime("%Y-%m-%d")
+            weekday = date.weekday()
+
+            # 计算价格因子
+            factors = {
+                "weekend": 1.0,
+                "holiday": 1.0,
+                "advance_booking": 1.0,
+                "demand_forecast": 1.0
+            }
+
+            # 周末溢价（周五、周六入住）
+            if weekday in [4, 5]:  # 周五、周六
+                factors["weekend"] = 1.20  # 周末溢价20%
+            elif weekday == 6:  # 周日
+                factors["weekend"] = 1.05  # 周日小幅溢价
+
+            # 节假日溢价
+            if date_str in holidays:
+                factors["holiday"] = 1.35  # 节假日溢价35%
+                # 节假日前一天也有小幅溢价
+                prev_date = (date - timedelta(days=1)).strftime("%Y-%m-%d")
+                if prev_date not in holidays:
+                    # 检查前一天是否需要调价
+                    pass
+
+            # 提前预订策略（越早预订，价格越稳定）
+            if i < 3:
+                # 近期预订（3天内）：价格略高，抓住紧急需求
+                factors["advance_booking"] = 1.05
+            elif i < 7:
+                # 中期预订（3-7天）：标准价格
+                factors["advance_booking"] = 1.0
+            else:
+                # 远期预订（7天以上）：鼓励提前规划
+                factors["advance_booking"] = 0.95
+
+            # 季节性需求波动（基于历史数据的规律）
+            month = date.month
+            if month in [7, 8]:  # 暑期旺季
+                seasonal_factor = 1.15
+            elif month in [1, 2]:  # 春节前后
+                seasonal_factor = 1.20
+            elif month in [3, 4, 5, 9, 10]:  # 平季
+                seasonal_factor = 1.05
+            else:  # 淡季
+                seasonal_factor = 0.95
+
+            # 随机需求波动（小幅，模拟真实市场）
+            factors["demand_forecast"] = 0.95 + rng.uniform(0, 0.10)
+
+            # 计算最终价格
+            final_multiplier = (
+                factors["weekend"] *
+                factors["holiday"] *
+                factors["advance_booking"] *
+                factors["demand_forecast"] *
+                seasonal_factor
+            )
+            predicted_price = round(base_price * final_multiplier, 2)
+
+            forecasts.append({
+                "date": date_str,
+                "weekday": ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][weekday],
+                "predicted_price": predicted_price,
+                "factors": factors,
+                "is_weekend": weekday in [4, 5, 6],
+                "is_holiday": date_str in holidays,
+                "holiday_name": holidays.get(date_str, "")
+            })
+
+        return {
+            "base_price": base_price,
+            "district": district,
+            "forecasts": forecasts,
+            "avg_forecast_price": round(sum(f["predicted_price"] for f in forecasts) / len(forecasts), 2),
+            "max_price": max(f["predicted_price"] for f in forecasts),
+            "min_price": min(f["predicted_price"] for f in forecasts),
+            "pricing_strategy": {
+                "weekend_premium": "周末房价上浮20%",
+                "holiday_premium": "节假日房价上浮35%",
+                "advance_discount": "提前7天以上预订可享95折"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error in price forecast: {e}")
+        raise HTTPException(status_code=500, detail=f"价格预测失败: {str(e)}")
+
+
+# =============================================================================
+# 新增：定价因子分解
+# =============================================================================
+
+@router.post("/factor-decomposition")
+def factor_decomposition(request: dict):
+    """
+    定价因子敏感度分析（Leave-One-Out Sensitivity）
+
+    对用户提交的房源特征，逐项「关闭 / 降级」并重新预测，
+    测量每项特征被移除后价格的变化量（即该项对最终定价的边际贡献）。
+    设施逐项独立展示，不合并，不保留残差项。
+    同时返回模型全局特征重要性，供交叉参考。
+    """
+    try:
+        from app.models.schemas import PredictionRequest
+
+        def build_request(**overrides):
+            base = {
+                'district': request.get('district', '武昌区'),
+                'trade_area': request.get('trade_area'),
+                'room_type': request.get('room_type', '整套'),
+                'capacity': request.get('capacity', 4),
+                'bedrooms': request.get('bedrooms', 2),
+                'bed_count': request.get('bed_count', 2),
+                'bathrooms': request.get('bathrooms', 1),
+                'area': request.get('area', 80),
+                'has_wifi': request.get('has_wifi', True),
+                'has_kitchen': request.get('has_kitchen', False),
+                'has_air_conditioning': request.get('has_air_conditioning', True),
+                'has_projector': request.get('has_projector', False),
+                'has_bathtub': request.get('has_bathtub', False),
+                'has_washer': request.get('has_washer', False),
+                'has_smart_lock': request.get('has_smart_lock', False),
+                'has_tv': request.get('has_tv', False),
+                'has_heater': request.get('has_heater', False),
+                'near_metro': request.get('near_metro', False),
+                'has_elevator': request.get('has_elevator', False),
+                'has_fridge': request.get('has_fridge', False),
+                'has_view': request.get('has_view', False),
+                'view_type': request.get('view_type'),
+                'has_terrace': request.get('has_terrace', False),
+                'has_mahjong': request.get('has_mahjong', False),
+                'has_big_living_room': request.get('has_big_living_room', False),
+                'has_parking': request.get('has_parking', False),
+            }
+            base.update(overrides)
+            return PredictionRequest(**base)
+
+        current_price = model_service.predict(build_request())
+        district_avg = _get_district_average(request.get('district', '武昌区')) or 200
+
+        factors = []
+
+        def _add(label: str, value_desc: str, counterfactual_desc: str, **overrides):
+            cf_price = model_service.predict(build_request(**overrides))
+            delta = round(current_price - cf_price, 1)
+            if abs(delta) < 0.5:
+                return
+            pct = round(delta / current_price * 100, 1) if current_price > 0 else 0
+            factors.append({
+                "factor": label,
+                "your_value": value_desc,
+                "baseline": counterfactual_desc,
+                "delta": delta,
+                "pct": pct,
+                "direction": "up" if delta > 0 else "down",
+            })
+
+        # 数值特征：逐项降为市场常见基线
+        user_area = request.get('area', 80)
+        user_bedrooms = request.get('bedrooms', 2)
+        user_bed_count = request.get('bed_count', user_bedrooms)
+        user_capacity = request.get('capacity', 4)
+
+        _add("面积", f"{user_area}㎡", "50㎡", area=50)
+        if user_bedrooms > 1:
+            _add("卧室数", f"{user_bedrooms}间", "1间", bedrooms=1, bed_count=1)
+        if user_bed_count > 1 and user_bed_count != user_bedrooms:
+            _add("床位数", f"{user_bed_count}张", "1张", bed_count=1)
+        if user_capacity > 2:
+            _add("可住人数", f"{user_capacity}人", "2人", capacity=2)
+
+        # 设施：每项独立 leave-one-out
+        facility_items = [
+            ('has_wifi', 'WiFi'), ('has_air_conditioning', '空调'),
+            ('has_kitchen', '厨房'), ('has_projector', '投影'),
+            ('has_bathtub', '浴缸'), ('has_washer', '洗衣机'),
+            ('has_smart_lock', '智能锁'), ('has_tv', '电视'),
+            ('has_heater', '暖气'), ('near_metro', '近地铁'),
+            ('has_elevator', '电梯'), ('has_fridge', '冰箱'),
+            ('has_terrace', '露台'), ('has_mahjong', '麻将机'),
+            ('has_parking', '停车位'),
+        ]
+        for attr, label in facility_items:
+            if request.get(attr, False):
+                _add(label, "有", "无", **{attr: False})
+
+        # 景观
+        if request.get('has_view', False):
+            vt = request.get('view_type', '景观')
+            _add(f"景观({vt})", "有", "无", has_view=False, view_type=None)
+
+        # 按绝对影响排序
+        factors.sort(key=lambda f: abs(f["delta"]), reverse=True)
+
+        # 全局特征重要性（与 /feature-importance 相同逻辑）
+        raw_importance = model_service.get_feature_importance()
+        global_importance = []
+        if raw_importance:
+            total = sum(raw_importance.values())
+            for feat, score in sorted(raw_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
+                display_name = _get_feature_display_name(feat)
+                global_importance.append({
+                    "feature": feat,
+                    "display_name": display_name if display_name != feat else feat,
+                    "importance": round(score / total * 100, 1),
+                })
+
+        # 模型元数据（训练指标）
+        meta = model_service.manager.price_model_meta or {}
+        test_metrics = meta.get("metrics", {})
+
+        return {
+            "predicted_price": round(current_price, 2),
+            "district_avg_price": round(district_avg, 2),
+            "factors": factors,
+            "global_importance": global_importance,
+            "model_info": {
+                "r2": test_metrics.get("r2"),
+                "mae": test_metrics.get("mae"),
+                "mape": test_metrics.get("mape"),
+                "sample_count": meta.get("sample_count_total"),
+                "feature_count": meta.get("feature_count"),
+                "trained_at": meta.get("trained_at"),
+            },
+            "methodology": {
+                "name": "逐项敏感度分析 (Leave-One-Out Sensitivity)",
+                "description": (
+                    "保持其他特征不变，将目标特征恢复为市场常见基线（如面积→50㎡、设施→关闭），"
+                    "测量预测价格的变化量，即该特征对您这套房源定价的边际贡献。"
+                ),
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error in factor decomposition: {e}")
+        raise HTTPException(status_code=500, detail=f"因子分解失败: {str(e)}")
+
+
+# =============================================================================
+# 新增：特征重要性
+# =============================================================================
+
+@router.get("/feature-importance")
+def get_feature_importance():
+    """
+    获取价格预测模型的特征重要性
+    
+    了解哪些因素对价格影响最大
+    """
+    importance = model_service.get_feature_importance()
+
+    if importance is None:
+        # 返回基于业务逻辑的模拟重要性
+        return {
+            "source": "business_logic",
+            "is_model_derived": False,
+            "features": [
+                {"feature": "商圈位置", "importance": 0.35, "description": "不同商圈价格差异显著"},
+                {"feature": "房型类型", "importance": 0.25, "description": "整套/独立房间/合住价格差异"},
+                {"feature": "容纳人数", "importance": 0.15, "description": "可住人数直接影响定价"},
+                {"feature": "卧室数量", "importance": 0.10, "description": "卧室数影响舒适度"},
+                {"feature": "停车位", "importance": 0.08, "description": "停车位是稀缺资源"},
+                {"feature": "厨房设施", "importance": 0.04, "description": "可做饭提升长住价值"},
+                {"feature": "WiFi", "importance": 0.03, "description": "基础必备设施"}
+            ],
+            "note": "当前使用业务逻辑估算，训练真实模型后将显示实际特征重要性"
+        }
+
+    # 格式化真实模型的重要性
+    formatted_features = []
+    total_importance = sum(importance.values())
+    for feature, score in sorted(importance.items(), key=lambda x: x[1], reverse=True):
+        formatted_features.append({
+            "feature": feature,
+            "display_name": _get_feature_display_name(feature),
+            "importance": round(score / total_importance, 4),
+            "raw_score": round(score, 2)
+        })
+
+    return {
+        "source": "xgboost_model",
+        "is_model_derived": True,
+        "features": formatted_features[:10],  # 前10个重要特征
+        "total_features": len(importance)
+    }
+
+
+# =============================================================================
+# 新增：竞争力评估
+# =============================================================================
+
+@router.post("/competitiveness")
+def competitiveness_assessment(request: dict):
+    """
+    竞争力评估
+
+    核心逻辑：
+    1. 用户提交房源特征和当前定价
+    2. 模型预测该房源的"合理价格"
+    3. 对比用户定价与合理价格，评估定价竞争力
+
+    竞争力定义：
+    - 用户定价 < 合理价格 → 高竞争力（性价比高，对租客有吸引力）
+    - 用户定价 ≈ 合理价格 → 适中竞争力（定价合理）
+    - 用户定价 > 合理价格 → 低竞争力（可能定价过高）
+    """
+    try:
+        from app.models.schemas import PredictionRequest
+
+        # 获取用户当前定价（必需参数）
+        user_price = request.get("current_price") or request.get("user_price")
+        if not user_price:
+            raise HTTPException(
+                status_code=400,
+                detail="请提供当前定价(current_price)以评估竞争力"
+            )
+
+        user_price = float(user_price)
+
+        # 构建预测请求
+        pred_request = PredictionRequest(
+            district=request.get('district', '武昌区'),
+            trade_area=request.get('trade_area'),
+            unit_id=request.get('unit_id') or request.get('unitId'),
+            room_type=request.get('room_type', '整套'),
+            capacity=request.get('capacity', 4),
+            bedrooms=request.get('bedrooms', 2),
+            bed_count=request.get('bed_count', 2),
+            bathrooms=request.get('bathrooms', 1),
+            area=request.get('area', 80),
+            has_wifi=request.get('has_wifi', True),
+            has_kitchen=request.get('has_kitchen', False),
+            has_air_conditioning=request.get('has_air_conditioning', True),
+            has_projector=request.get('has_projector', False),
+            has_bathtub=request.get('has_bathtub', False),
+            has_washer=request.get('has_washer', False),
+            has_smart_lock=request.get('has_smart_lock', False),
+            has_tv=request.get('has_tv', False),
+            has_heater=request.get('has_heater', False),
+            near_metro=request.get('near_metro', False),
+            has_elevator=request.get('has_elevator', False),
+            has_fridge=request.get('has_fridge', False),
+            has_view=request.get('has_view', False),
+            view_type=request.get('view_type'),
+            has_terrace=request.get('has_terrace', False),
+            has_mahjong=request.get('has_mahjong', False),
+            has_big_living_room=request.get('has_big_living_room', False),
+            has_parking=request.get('has_parking', False),
+        )
+
+        # 模型预测的合理价格
+        predicted_price = model_service.predict(pred_request)
+
+        # 获取商圈均价作为参考
+        district_avg = _get_district_average(request.get('district', '武昌区')) or 200
+
+        # ========== 核心竞争力计算 ==========
+        # 价格比率 = 用户定价 / 合理价格
+        price_ratio = user_price / predicted_price if predicted_price > 0 else 1.0
+
+        # 竞争力评分（0-100分）
+        # 价格比率越低（性价比越高），竞争力越强
+        if price_ratio <= 0.80:
+            # 用户定价远低于合理价格，极具竞争力
+            competitiveness_score = 95
+            competitiveness_level = "极具竞争力"
+            price_comment = f"定价{user_price}元，低于合理价{round((1-price_ratio)*100)}%，性价比极高"
+        elif price_ratio <= 0.90:
+            competitiveness_score = 80
+            competitiveness_level = "高竞争力"
+            price_comment = f"定价{user_price}元，略低于合理价，有价格优势"
+        elif price_ratio <= 1.00:
+            competitiveness_score = 65
+            competitiveness_level = "竞争力适中"
+            price_comment = f"定价{user_price}元，与合理价基本持平，定价合理"
+        elif price_ratio <= 1.10:
+            competitiveness_score = 50
+            competitiveness_level = "竞争力偏弱"
+            price_comment = f"定价{user_price}元，略高于合理价{round((price_ratio-1)*100)}%，建议优化"
+        elif price_ratio <= 1.20:
+            competitiveness_score = 35
+            competitiveness_level = "竞争力较弱"
+            price_comment = f"定价{user_price}元，高于合理价{round((price_ratio-1)*100)}%，需增强特色"
+        else:
+            competitiveness_score = 20
+            competitiveness_level = "缺乏竞争力"
+            price_comment = f"定价{user_price}元，显著高于合理价{round((price_ratio-1)*100)}%，建议重新定价"
+
+        # ========== 设施配置评分 ==========
+        facility_score = 0
+        facilities = []
+
+        if request.get('has_projector'):
+            facilities.append("投影")
+            facility_score += 5
+        if request.get('has_bathtub'):
+            facilities.append("浴缸")
+            facility_score += 5
+        if request.get('near_metro'):
+            facilities.append("近地铁")
+            facility_score += 6
+        if request.get('has_terrace'):
+            facilities.append("露台")
+            facility_score += 4
+        if request.get('has_mahjong'):
+            facilities.append("麻将机")
+            facility_score += 4
+        if request.get('has_kitchen'):
+            facilities.append("厨房")
+            facility_score += 3
+        if request.get('has_washer'):
+            facilities.append("洗衣机")
+            facility_score += 2
+        if request.get('has_smart_lock'):
+            facilities.append("智能锁")
+            facility_score += 2
+        if request.get('has_elevator'):
+            facilities.append("电梯")
+            facility_score += 2
+        if request.get('has_fridge'):
+            facilities.append("冰箱")
+            facility_score += 2
+        if request.get('has_view'):
+            facilities.append(request.get('view_type', '景观'))
+            facility_score += 5
+        if request.get('has_parking'):
+            facilities.append("停车位")
+            facility_score += 4
+
+        # 综合得分 = 价格竞争力(70%) + 设施配置(30%)
+        final_score = competitiveness_score * 0.7 + min(facility_score, 40) * 0.3
+
+        # ========== 市场定位分析 ==========
+        if user_price < district_avg * 0.85:
+            market_position = "低价策略"
+            position_detail = f"定价低于商圈均价{round((1-user_price/district_avg)*100)}%，适合快速获客"
+        elif user_price < district_avg * 1.15:
+            market_position = "市场均价"
+            position_detail = f"定价接近商圈均价({round(district_avg)}元)，竞争激烈"
+        else:
+            market_position = "高端定位"
+            position_detail = f"定价高于商圈均价{round((user_price/district_avg-1)*100)}%，需突出特色"
+
+        # ========== 优化建议 ==========
+        suggestions = []
+
+        # 价格建议
+        # 模型「合理价」与「商圈均价」口径不同：可能出现定价已明显低于商圈均价，
+        # 却仍高于模型估算合理价。此时不应再建议「继续降价」，避免与低价策略文案矛盾。
+        discount_vs_district = (user_price / district_avg) if district_avg > 0 else 1.0
+        already_low_vs_district_avg = discount_vs_district < 0.85  # 与上方「低价策略」阈值一致
+
+        if price_ratio > 1.1:
+            if already_low_vs_district_avg:
+                suggestions.append(
+                    "当前定价已明显低于商圈均价；模型估算合理价仅供参考。若转化仍不理想，建议优先完善设施、照片与描述，而非继续降价"
+                )
+            else:
+                suggestions.append(f"建议降价至{round(predicted_price)}元左右以提升竞争力")
+        elif price_ratio < 0.85:
+            suggestions.append(f"当前定价偏低，可考虑提价至{round(predicted_price * 0.95)}元")
+
+        # 设施建议
+        if facility_score < 15:
+            suggestions.append("设施配置较少，建议增加投影、浴缸等特色设施")
+        if not request.get('near_metro') and not request.get('has_elevator'):
+            suggestions.append("交通便利性一般，可在描述中突出其他优势")
+
+        if not suggestions:
+            suggestions.append("当前配置和定价较为合理，保持现状即可")
+
+        return {
+            "competitiveness_score": round(final_score, 1),
+            "competitiveness_level": competitiveness_level,
+            "pricing_analysis": {
+                "user_price": round(user_price, 2),
+                "fair_price": round(predicted_price, 2),
+                "price_ratio": round(price_ratio, 2),
+                "price_difference": round(user_price - predicted_price, 2),
+                "evaluation": price_comment,
+                "district_avg_scope": "district_all_listings",
+            },
+            "market_position": {
+                "position": market_position,
+                "district_avg_price": round(district_avg, 2),
+                "detail": position_detail,
+                "district_avg_scope": "district_all_listings",
+            },
+            "facility_analysis": {
+                "score": facility_score,
+                "facilities": facilities,
+                "count": len(facilities)
+            },
+            "suggestions": suggestions[:4]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in competitiveness assessment: {e}")
+        raise HTTPException(status_code=500, detail=f"竞争力评估失败: {str(e)}")
+
+
+# =============================================================================
+# 新增：价格历史趋势
+# =============================================================================
+
+@router.get("/trend")
+def get_price_trend(
+    district: str = Query(..., description="商圈名称"),
+    days: int = Query(30, ge=7, le=90, description="统计天数")
+):
+    """
+    获取价格预测的历史趋势
+    
+    展示指定商圈的价格变化趋势，基于MySQL真实数据
+    """
+    from app.db.database import SessionLocal, Listing
+    from datetime import datetime, timedelta
+    
+    db = SessionLocal()
+    try:
+        # 从MySQL获取该商圈的真实价格数据
+        listings = db.query(Listing).filter(
+            Listing.district == district,
+            Listing.final_price.isnot(None)
+        ).all()
+        
+        if not listings:
+            return {
+                "district": district,
+                "days": 0,
+                "trend": [],
+                "summary": {"start_price": 0, "end_price": 0, "change_rate": 0},
+                "data_kind": "empty",
+                "methodology": {
+                    "note": "无该商圈房源截面数据，无法生成示意序列。",
+                },
+            }
+        
+        # 获取真实价格统计
+        prices = [float(l.final_price) for l in listings if l.final_price is not None]  # type: ignore
+        base_price = sum(prices) / len(prices)
+        min_price = min(prices)
+        max_price = max(prices)
+        
+        # 基于截面均价生成「多日示意曲线」（非真实日级成交/挂牌轨迹，亦非模型预测路径）
+        import hashlib
+
+        trend = []
+        today = datetime.now()
+        seed = int(hashlib.md5(f"{district}:{days}:{base_price:.2f}".encode()).hexdigest()[:8], 16)
+        rng = __import__("random").Random(seed)
+
+        for i in range(days):
+            date = today - timedelta(days=days - i - 1)
+            date_str = date.strftime("%Y-%m-%d")
+            variation = rng.uniform(0.92, 1.08)
+            actual_price = base_price * variation
+            predicted_price = base_price * rng.uniform(0.95, 1.05)
+
+            trend.append({
+                "date": date_str,
+                "predicted_price": round(predicted_price, 2),
+                "actual_price": round(actual_price, 2),
+            })
+
+        return {
+            "district": district,
+            "days": len(trend),
+            "trend": trend,
+            "data_kind": "synthetic_daily_from_cross_section",
+            "methodology": {
+                "note": (
+                    "每日点位由该商圈当前样本均价的确定性伪随机波动生成，用于界面展示；"
+                    "非历史真实日序列。真实日均价请使用价格日历相关接口（如 /api/dashboard/trends）。"
+                ),
+            },
+            "summary": {
+                "start_price": trend[0]['actual_price'] if trend else 0,
+                "end_price": trend[-1]['actual_price'] if trend else 0,
+                "change_rate": round((trend[-1]['actual_price'] - trend[0]['actual_price']) / trend[0]['actual_price'] * 100, 2) if trend and trend[0]['actual_price'] else 0,
+                "sample_count": len(prices),
+                "min_price": round(min_price, 2),
+                "max_price": round(max_price, 2)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"获取价格趋势失败: {e}")
+        return {
+            "district": district,
+            "days": 0,
+            "trend": [],
+            "summary": {"start_price": 0, "end_price": 0, "change_rate": 0, "error": str(e)}
+        }
+    finally:
+        db.close()
+
+
+# =============================================================================
+# 获取行政区和商圈映射数据
+# =============================================================================
+
+@router.get("/district-trade-areas")
+def get_district_trade_areas():
+    """
+    获取所有行政区和对应的商圈列表
+    
+    返回格式:
+    {
+        "districts": ["江汉区", "武昌区", ...],
+        "trade_areas": {
+            "江汉区": ["江汉路/中山公园", "武汉国际博览中心/王家湾", ...],
+            "武昌区": ["光谷广场/武昌高校区", ...],
+            ...
+        }
+    }
+    """
+    from sqlalchemy import text
+
+    db = None
+    try:
+        db = SessionLocal()
+        query = text("""
+            SELECT DISTINCT district, trade_area 
+            FROM listings 
+            WHERE district IS NOT NULL AND district != ''
+            ORDER BY district, trade_area
+        """)
+        result = db.execute(query).fetchall()
+
+        districts = set()
+        trade_areas_by_district = {}
+
+        for row in result:
+            district = row[0]
+            trade_area = row[1]
+
+            if district:
+                districts.add(district)
+
+                if district not in trade_areas_by_district:
+                    trade_areas_by_district[district] = []
+
+                if trade_area and trade_area not in trade_areas_by_district[district]:
+                    trade_areas_by_district[district].append(trade_area)
+
+        districts_list = sorted(list(districts))
+
+        return {
+            "districts": districts_list,
+            "trade_areas": trade_areas_by_district
+        }
+
+    except Exception as e:
+        logger.error(f"获取行政区商圈数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取数据失败: {str(e)}")
+    finally:
+        if db is not None:
+            db.close()

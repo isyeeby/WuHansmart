@@ -1,0 +1,188 @@
+# -*- coding: utf-8 -*-
+"""
+价格日历聚合特征（训练与线上一致）。
+
+从 price_calendars 表按 unit_id 聚合，刻画动态定价水平、波动与周末溢价等，
+与 listings.final_price 互补：前者反映日历上的价格分布，后者多为挂牌展示价。
+"""
+from __future__ import annotations
+
+from typing import Dict, List, Sequence, Tuple
+
+import numpy as np
+import pandas as pd
+from sqlalchemy.orm import Session
+
+from app.db.database import PriceCalendar
+
+# 与训练脚本、model_manager、feature_names_latest 保持列名一致
+CALENDAR_FEATURE_NAMES: List[str] = [
+    "cal_n_days",
+    "cal_mean",
+    "cal_std",
+    "cal_min",
+    "cal_max",
+    "cal_median",
+    "cal_cv",
+    "cal_range_ratio",
+    "cal_bookable_ratio",
+    "cal_weekend_premium",
+]
+
+
+def _calendar_rows_to_dataframe(rows: List[PriceCalendar]) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame(
+            columns=["unit_id", "date", "price", "can_booking"]
+        )
+    data = [
+        (
+            r.unit_id,
+            r.date,
+            float(r.price),
+            float(r.can_booking if r.can_booking is not None else 1),
+        )
+        for r in rows
+    ]
+    return pd.DataFrame(data, columns=["unit_id", "date", "price", "can_booking"])
+
+
+def aggregate_calendar_by_units_from_rows(
+    rows: List[PriceCalendar],
+) -> pd.DataFrame:
+    """
+    将 ORM 行聚合为每个 unit_id 一行日历特征。
+    周末定义：周六、周日（pandas dayofweek 5、6）。
+    """
+    df = _calendar_rows_to_dataframe(rows)
+    if df.empty:
+        return pd.DataFrame(columns=["unit_id"] + CALENDAR_FEATURE_NAMES)
+
+    df["dt"] = pd.to_datetime(df["date"], errors="coerce")
+    df["is_weekend"] = df["dt"].dt.dayofweek.isin([5, 6])
+
+    g = df.groupby("unit_id", sort=False)
+    base = g.agg(
+        cal_n_days=("price", "count"),
+        cal_mean=("price", "mean"),
+        cal_std=("price", "std"),
+        cal_min=("price", "min"),
+        cal_max=("price", "max"),
+        cal_median=("price", "median"),
+        cal_bookable_ratio=("can_booking", "mean"),
+    ).reset_index()
+
+    base["cal_std"] = base["cal_std"].fillna(0.0)
+
+    eps = 1e-6
+    base["cal_cv"] = base["cal_std"] / (base["cal_mean"].abs() + eps)
+    base["cal_range_ratio"] = (base["cal_max"] - base["cal_min"]) / (
+        base["cal_mean"].abs() + eps
+    )
+
+    w_end = df[df["is_weekend"]].groupby("unit_id")["price"].mean()
+    w_day = df[~df["is_weekend"]].groupby("unit_id")["price"].mean()
+    merged = pd.DataFrame({"unit_id": base["unit_id"]})
+    merged = merged.merge(
+        w_end.rename("we"), left_on="unit_id", right_index=True, how="left"
+    )
+    merged = merged.merge(
+        w_day.rename("wd"), left_on="unit_id", right_index=True, how="left"
+    )
+    base["cal_weekend_premium"] = (
+        (merged["we"] / (merged["wd"] + eps) - 1.0).fillna(0.0).astype(float).values
+    )
+
+    for c in CALENDAR_FEATURE_NAMES:
+        if c not in base.columns:
+            base[c] = 0.0
+    return base[["unit_id"] + CALENDAR_FEATURE_NAMES]
+
+
+def load_calendar_aggregates_for_unit_ids(
+    db: Session, unit_ids: Sequence[str], chunk_size: int = 800
+) -> pd.DataFrame:
+    """批量查询 unit_id 列表对应的全部日历行并聚合（避免 IN 过长）。"""
+    ids = [str(u) for u in unit_ids if u]
+    if not ids:
+        return pd.DataFrame(columns=["unit_id"] + CALENDAR_FEATURE_NAMES)
+
+    all_rows: List[PriceCalendar] = []
+    for i in range(0, len(ids), chunk_size):
+        batch = ids[i : i + chunk_size]
+        q = db.query(PriceCalendar).filter(PriceCalendar.unit_id.in_(batch))
+        all_rows.extend(q.all())
+
+    return aggregate_calendar_by_units_from_rows(all_rows)
+
+
+def calendar_feature_dict_for_unit(
+    db: Session, unit_id: str
+) -> Dict[str, float]:
+    """单房源推理：从数据库拉日历并返回特征字典（键与 CALENDAR_FEATURE_NAMES 一致）。"""
+    rows = db.query(PriceCalendar).filter(PriceCalendar.unit_id == unit_id).all()
+    agg = aggregate_calendar_by_units_from_rows(rows)
+    if agg.empty:
+        return {k: 0.0 for k in CALENDAR_FEATURE_NAMES}
+    row = agg.iloc[0]
+    return {k: float(row[k]) for k in CALENDAR_FEATURE_NAMES}
+
+
+def train_median_defaults(
+    train_df: pd.DataFrame, cal_cols: List[str]
+) -> Dict[str, float]:
+    """
+    仅用训练集、且 cal_n_days>0 的样本估计日历特征中位数，供无日历样本与线上默认填充。
+    """
+    sub = train_df[train_df["cal_n_days"] > 0]
+    out: Dict[str, float] = {}
+    if sub.empty:
+        for c in cal_cols:
+            out[c] = 0.0
+        return out
+    for c in cal_cols:
+        m = sub[c].median()
+        out[c] = float(0.0 if pd.isna(m) else m)
+    return out
+
+
+def impute_calendar_train_test(
+    train_df: pd.DataFrame, test_df: pd.DataFrame
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, float]]:
+    """
+    划分之后：对无日历房源用「训练集中有日历样本」的中位数填充除 cal_n_days 外的日历列；
+    cal_n_days 保持 0。返回 api_defaults：线上无 unit_id 时采用 cal_n_days=0 + 其余为中位数。
+    """
+    names = CALENDAR_FEATURE_NAMES
+    tr = train_df.copy()
+    te = test_df.copy()
+    for n in names:
+        if n not in tr.columns:
+            tr[n] = np.nan
+        if n not in te.columns:
+            te[n] = np.nan
+    tr["cal_n_days"] = tr["cal_n_days"].fillna(0)
+    te["cal_n_days"] = te["cal_n_days"].fillna(0)
+
+    med = train_median_defaults(tr, names)
+    for n in names:
+        if n == "cal_n_days":
+            continue
+        mval = med[n]
+        tr.loc[tr["cal_n_days"] <= 0, n] = tr.loc[tr["cal_n_days"] <= 0, n].fillna(mval)
+        te.loc[te["cal_n_days"] <= 0, n] = te.loc[te["cal_n_days"] <= 0, n].fillna(mval)
+
+    sub = tr[tr["cal_n_days"] > 0]
+    if len(sub) > 0:
+        for n in names:
+            if n == "cal_n_days":
+                continue
+            col_med = sub[n].median()
+            if pd.notna(col_med):
+                fv = float(col_med)
+                tr.loc[tr["cal_n_days"] > 0, n] = tr.loc[tr["cal_n_days"] > 0, n].fillna(fv)
+                te.loc[te["cal_n_days"] > 0, n] = te.loc[te["cal_n_days"] > 0, n].fillna(fv)
+
+    api_defaults = {**med}
+    api_defaults["cal_n_days"] = 0.0
+    return tr, te, api_defaults

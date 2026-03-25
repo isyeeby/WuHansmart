@@ -1,0 +1,21 @@
+[Unit]
+Description=Tujia FastAPI (Gunicorn + UvicornWorker)
+After=network.target mysql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/tujia-backend
+Environment="PATH=/opt/tujia-backend/.venv/bin"
+ExecStart=/opt/tujia-backend/.venv/bin/gunicorn main:app \
+  -k uvicorn.workers.UvicornWorker \
+  -b 127.0.0.1:8000 \
+  --workers 2 \
+  --timeout 120 \
+  --access-logfile - \
+  --error-logfile -
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

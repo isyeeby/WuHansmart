@@ -1,0 +1,106 @@
+{
+  "metrics": {
+    "mae": 23.668134937441447,
+    "rmse": 80.01914879182348,
+    "r2": 0.7625018347903718,
+    "mape": 10.440037894652422
+  },
+  "train_metrics": {
+    "mae": 3.5266264316873173,
+    "rmse": 6.235104341048934,
+    "r2": 0.9971705942050801,
+    "mape": 1.717523426452014
+  },
+  "trained_at": "2026-03-23T22:43:12.128393",
+  "model_type": "XGBoost Regressor (log1p target)",
+  "data_source": "MySQL Database",
+  "feature_count": 73,
+  "sample_count_train": 1966,
+  "sample_count_test": 492,
+  "sample_count_total": 2458,
+  "price_stats": {
+    "min": 50.0,
+    "max": 2619.0,
+    "mean": 199.8319772172498,
+    "median": 165.0
+  },
+  "district_encoder": {
+    "东西湖区": 0,
+    "武昌区": 1,
+    "汉阳区": 2,
+    "江夏区": 3,
+    "江岸区": 4,
+    "江汉区": 5,
+    "洪山区": 6,
+    "硚口区": 7,
+    "蔡甸区": 8,
+    "青山区": 9,
+    "黄陂区": 10
+  },
+  "trade_area_encoder": {
+    "东西湖区": 0,
+    "光谷广场/武昌高校区": 1,
+    "光谷科技会展中心/光谷未来科技城": 2,
+    "天河机场/盘龙城": 3,
+    "楚河汉街/东湖风景区/省博物馆": 4,
+    "武昌万象城/武昌江滩": 5,
+    "武汉国际博览中心/王家湾": 6,
+    "武汉国际博览中心/王家湾商圈": 7,
+    "武汉火车站/欢乐谷/青山工业区": 8,
+    "汉口北/百步亭": 9,
+    "汉口火车站/泛海CBD/园博园": 10,
+    "汉口金融中心/武汉广场/中山公园": 11,
+    "汉阳区": 12,
+    "江夏区": 13,
+    "江夏大学城/藏龙岛": 14,
+    "江夏大学城／藏龙岛": 15,
+    "江岸区": 16,
+    "江汉路/汉口江滩": 17,
+    "沌口/武汉体育中心/江汉大学": 18,
+    "洪山区": 19,
+    "硚口区": 20,
+    "街道口/武汉大学/南湖": 21,
+    "青山区": 22,
+    "黄陂区": 23,
+    "黄陂木兰文化旅游区": 24,
+    "黄鹤楼/粮道街/武昌火车站": 25
+  },
+  "house_type_encoder": {
+    "单间": 0,
+    "整套": 1
+  },
+  "methodology": {
+    "split": "stratified_holdout_80_20_first_fold_price_bucket",
+    "target_encoding": "district price moments estimated on training split only",
+    "categorical_encoding": "integer codes fitted on training split only; OOV -> 0",
+    "target_transform": "log1p(price); prediction expm1",
+    "is_budget_definition": "structural: area<30 and bedroom_count<=1 (no price in feature)",
+    "facility_count": "sum of binary facility columns in FACILITY_KEYWORDS mapping",
+    "sample_weights": "higher weight for price<100 and price>500 in training",
+    "n_estimators": "600 trees; eval_set held-out log-target for monitoring (no early stop if sklearn fit API lacks callbacks)",
+    "price_calendar_features": "Per-unit aggregates (CALENDAR_FEATURE_NAMES): from MySQL price_calendars when training on MySQL; from Hive ODS ods_price_calendar when training on Hive (weekend premium may be 0 if not computed in the warehouse). Missing calendar imputed with train-split medians among units with calendar."
+  },
+  "calendar_feature_names": [
+    "cal_n_days",
+    "cal_mean",
+    "cal_std",
+    "cal_min",
+    "cal_max",
+    "cal_median",
+    "cal_cv",
+    "cal_range_ratio",
+    "cal_bookable_ratio",
+    "cal_weekend_premium"
+  ],
+  "improvements": [
+    "no_label_leakage: 行政区统计仅训练集",
+    "log_transform: 对数目标",
+    "stratified_holdout: 按价格分桶分层留出",
+    "sample_weight: 样本权重",
+    "is_budget: 结构定义(面积+卧室数)，不含房价",
+    "facility_count: 与线上一致的二值设施求和",
+    "encoders: district + trade_area + house_type 持久化",
+    "price_calendar: 动态定价统计特征 + 训练集条件中位数填充",
+    "n_estimators=600: 固定轮数（环境不支持 fit 早停参数时）"
+  ]
+}
