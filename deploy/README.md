@@ -15,6 +15,8 @@ git subtree split --prefix=Tujia-backend -b deploy-backend
 git subtree split --prefix=TuJiaFeature -b deploy-frontend
 ```
 
+`main` 有新提交后若要刷新子树分支：先 `git branch -D deploy-backend deploy-frontend`，再执行上面两条 `git subtree split`（常见 Windows 版 Git 无 `--force` 覆盖选项）。
+
 推送：
 
 ```bash

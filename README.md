@@ -15,4 +15,4 @@
 - **`deploy-backend`**：`git subtree split` 自 `Tujia-backend`，克隆后仓库根目录即后端项目。
 - **`deploy-frontend`**：自 `TuJiaFeature`，根目录即前端项目。
 
-上线清单与推送命令见 [deploy/README.md](deploy/README.md)。更新子树分支：在 `main` 上提交后重新执行 `git subtree split --prefix=... -b ...`（可加 `--force` 覆盖同名分支）。
+上线清单与推送命令见 [deploy/README.md](deploy/README.md)。更新子树分支：见该文档（需先删除旧 `deploy-*` 分支再 `subtree split`）。
