@@ -1,0 +1,66 @@
+# 单机本地文件系统 Hive（无 HDFS）。先启动 Docker Desktop，再在 Tujia-backend 目录执行：
+#   docker compose -f docker-compose-hive.yml up -d
+# 网络不再要求手动 docker network create（此前 external: true 会导致 compose 直接失败）。
+
+services:
+  hive-postgres:
+    image: bde2020/hive-metastore-postgresql:2.3.0
+    container_name: hive-postgres
+    environment:
+      POSTGRES_USER: hive
+      POSTGRES_PASSWORD: hive
+      POSTGRES_DB: metastore
+    ports:
+      - "5433:5432"
+    networks:
+      - tujia-hive-net
+
+  hive-metastore:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-metastore
+    environment:
+      HIVE_SITE_CONF_hive_metastore_uris: thrift://hive-metastore:9083
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-postgres:5432/metastore
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName: hive
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword: hive
+      # 与 hive-server 一致：本地 file:///，避免指向不存在的 HDFS NameNode
+      HIVE_SITE_CONF_fs_defaultFS: file:///
+      HIVE_SITE_CONF_hive_metastore_warehouse_dir: /user/hive/warehouse
+    depends_on:
+      - hive-postgres
+    networks:
+      - tujia-hive-net
+    ports:
+      - "9083:9083"
+    command: /opt/hive/bin/hive --service metastore
+
+  hive-server:
+    image: bde2020/hive:2.3.2-postgresql-metastore
+    container_name: hive-server
+    environment:
+      HIVE_SITE_CONF_hive_metastore_uris: thrift://hive-metastore:9083
+      HIVE_SITE_CONF_hive_server2_enable_doAs: "false"
+      HIVE_SITE_CONF_hive_server2_authentication: "NONE"
+      HIVE_SITE_CONF_fs_defaultFS: file:///
+      HIVE_SITE_CONF_hive_metastore_warehouse_dir: /user/hive/warehouse
+      # 供首次 schematool -initSchema 写入 PostgreSQL 元数据（与 metastore 一致）
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionURL: jdbc:postgresql://hive-postgres:5432/metastore
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionDriverName: org.postgresql.Driver
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionUserName: hive
+      HIVE_SITE_CONF_javax_jdo_option_ConnectionPassword: hive
+    depends_on:
+      - hive-metastore
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    networks:
+      - tujia-hive-net
+    volumes:
+      - ./data/hive_import:/opt/hive/data/hive_import
+      - ./sql:/opt/hive/data/sql:ro
+    command: /opt/hive/bin/hive --service hiveserver2
+
+networks:
+  tujia-hive-net:
+    driver: bridge

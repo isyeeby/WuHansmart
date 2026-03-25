@@ -1,0 +1,42 @@
+# --- 通用 ---
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.env.*.local
+
+# --- 编辑器 / 工具 ---
+.idea/
+.vscode/
+.claude/settings.local.json
+*.swp
+*~
+
+# --- 前端 TuJiaFeature ---
+TuJiaFeature/node_modules/
+TuJiaFeature/dist/
+TuJiaFeature/build/
+TuJiaFeature/coverage/
+
+# --- 后端 Tujia-backend ---
+Tujia-backend/__pycache__/
+Tujia-backend/**/__pycache__/
+Tujia-backend/*.py[cod]
+Tujia-backend/.venv/
+Tujia-backend/venv/
+Tujia-backend/env/
+Tujia-backend/.pytest_cache/
+Tujia-backend/htmlcov/
+Tujia-backend/.coverage
+Tujia-backend/logs/
+Tujia-backend/*.db
+Tujia-backend/.env
+
+# 大体积数据与导入中间文件（在服务器单独部署，勿进仓库）
+Tujia-backend/tujia_calendar_data*.json
+Tujia-backend/data/hive_import/
+
+# 模型二进制（在服务器或制品库提供；仓库内仅保留小体积元数据 JSON）
+Tujia-backend/models/*.pkl
+Tujia-backend/models/*.npz

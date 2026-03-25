@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:8000/api/investment/opportunities?min_roi=5\")",
+      "Bash(curl -s \"http://localhost:8000/api/analysis/price-opportunities?min_gap_rate=10&limit=5\")",
+      "Bash(curl -s \"http://localhost:8000/api/investment/opportunities?min_roi=0&limit=10\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(''''\\\\n''''.join\\([f\"\"{i[''''title''''][:20]}... | ¥{i[''''current_price'''']}\"\" for i in d[:5]]\\)\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(curl -X GET \"http://localhost:8000/api/predict/health\")",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(taskkill /F /IM uvicorn.exe)",
+      "Bash(taskkill /F /PID 37516)",
+      "Bash(taskkill /F /PID 31684)",
+      "Bash(taskkill /F /PID 13260)",
+      "Bash(taskkill /F /PID 25564)",
+      "Bash(for pid:*)",
+      "Bash(do taskkill:*)",
+      "Bash(done)",
+      "Bash(netstat -ano)",
+      "Bash(find d:/code/tujiaALL/TuJiaFeature/src -type f -name *.ts -o -name *.tsx -o -name *.js -o -name *.jsx)",
+      "Bash(find d:/code/tujiaALL/Tujia-backend -type f \\\\\\(-name *.java -o -name *.xml -o -name *.yml -o -name *.yaml -o -name *.properties \\\\\\))",
+      "Read(//d/code/tujiaALL/$HOME/**)"
+    ]
+  }
+}

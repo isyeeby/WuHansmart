@@ -1,0 +1,21 @@
+{
+  "saved_at": "2026-03-25T07:50:12.993187+00:00",
+  "model_path": "D:\\code\\tujiaALL\\Tujia-backend\\models\\listing_scene_tfidf.joblib",
+  "weak_rule_version": "4",
+  "label_names": [
+    "couple",
+    "family",
+    "business",
+    "exam",
+    "team_party",
+    "medical",
+    "pet_friendly",
+    "long_stay"
+  ],
+  "hamming_loss": 0.06502242152466367,
+  "f1_micro": 0.8927911275415896,
+  "f1_macro": 0.8488275611703018,
+  "n_train": 1784,
+  "n_test": 446,
+  "mode": "word"
+}

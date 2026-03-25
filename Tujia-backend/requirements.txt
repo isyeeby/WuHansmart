@@ -1,0 +1,43 @@
+# Web Framework
+fastapi==0.109.2
+uvicorn==0.27.1
+
+# Data Validation
+pydantic==2.6.1
+pydantic-settings==2.1.0
+
+# Database - Hive
+pyhive[hive]==0.7.0
+thrift==0.16.0
+sasl==0.3.1
+thrift_sasl==0.4.3
+
+# Database - MySQL (for user data)
+sqlalchemy==2.0.27
+pymysql==1.1.0
+aiomysql==0.2.0
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+
+# ML/DL
+xgboost==2.0.3
+scikit-learn==1.4.0
+jieba==0.42.1
+pandas==2.2.0
+numpy==1.26.4
+
+# Crawler
+scrapy==2.11.1
+selenium==4.18.1
+fake-useragent==1.4.0
+
+# Utils
+python-dotenv==1.0.1
+ijson==3.2.3
+schedule==1.2.1
+
+# Scheduling
+apscheduler==3.10.4
