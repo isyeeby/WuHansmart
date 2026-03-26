@@ -29,10 +29,10 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   const navigate = useNavigate();
 
   return (
-    <div className="mb-8">
+    <div className="mb-6 sm:mb-8">
       {/* 顶部导航区 */}
       {(showBack || extra) && (
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-4 flex items-center justify-between sm:mb-6">
           {showBack && (
             <Button
               type="text"
@@ -48,33 +48,33 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       )}
 
       {/* 标题区 */}
-      <div className="border-b border-[#ebe7e0] pb-6">
+      <div className="border-b border-[#ebe7e0] pb-4 sm:pb-6">
         <Space direction="vertical" size={8} className="w-full">
           {/* 分类标签 */}
-          <Text className="text-xs uppercase tracking-[0.2em] text-[#999] font-medium">
+          <Text className="text-[10px] font-medium uppercase tracking-[0.18em] text-[#999] sm:text-xs sm:tracking-[0.2em]">
             {category}
           </Text>
 
           {/* 主标题 */}
-          <div className="flex items-start justify-between gap-6">
-            <div className="flex-1">
+          <div className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="min-w-0 flex-1">
               <Title
                 level={4}
-                className="!m-0 font-serif text-2xl font-semibold text-[#1a1a1a] leading-tight"
+                className="!m-0 font-serif text-xl font-semibold leading-tight text-[#1a1a1a] sm:text-2xl"
               >
                 {title}
               </Title>
 
               {/* 副标题 */}
               {subtitle && (
-                <p className="text-sm text-[#6b6b6b] mt-3 leading-relaxed max-w-3xl">
+                <p className="mt-2 max-w-3xl text-xs leading-relaxed text-[#6b6b6b] sm:mt-3 sm:text-sm">
                   {subtitle}
                 </p>
               )}
             </div>
 
             {/* 额外的右侧内容 */}
-            {children}
+            {children ? <div className="shrink-0 sm:self-start">{children}</div> : null}
           </div>
         </Space>
       </div>
