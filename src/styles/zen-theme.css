@@ -1663,3 +1663,29 @@ body {
   border-radius: 12px;
   overflow: hidden;
 }
+
+/* ─── 房源列表 · 栅格卡片同排等高（antd List grid：Row → 宽度 div → Col → .ant-list-item） ─── */
+.listings-result-list.ant-list-grid .ant-list-container.ant-row {
+  align-items: stretch;
+}
+.listings-result-list.ant-list-grid .ant-list-container.ant-row > div {
+  display: flex;
+  min-width: 0;
+}
+/* Col 或等效包裹层纵向撑满 */
+.listings-result-list.ant-list-grid .ant-list-container.ant-row > div > .ant-col {
+  display: flex !important;
+  min-width: 0;
+}
+.listings-result-list.ant-list-grid .ant-list-item {
+  display: flex !important;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  margin-block: 0;
+}
+.listings-result-list.ant-list-grid .ant-list-item > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}

@@ -16,7 +16,6 @@ import {
   CompassOutlined,
   HomeOutlined,
   PlusCircleOutlined,
-  BugOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext';
@@ -64,7 +63,6 @@ const MainLayout: React.FC = () => {
     { key: '/prediction', icon: <ExperimentOutlined />, label: '智能定价', path: '/prediction' },
     { key: '/recommendation', icon: <HeatMapOutlined />, label: '个性化推荐', path: '/recommendation' },
     { key: '/favorites', icon: <HeartOutlined />, label: '我的收藏', path: '/favorites' },
-    { key: '/api-test', icon: <BugOutlined />, label: '接口测试', path: '/api-test' },
   ];
 
   const userMenu = {
