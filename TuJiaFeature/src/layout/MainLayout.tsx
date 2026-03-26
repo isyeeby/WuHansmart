@@ -157,8 +157,8 @@ const MainLayout: React.FC = () => {
       {/* Footer */}
       {!collapsed && (
         <div className="px-6 py-6 border-t border-[#ebe7e0]">
-          <p className="text-xs text-[#999] tracking-wide">
-            Wuhan B&B<br />Intelligence System
+          <p className="text-xs text-[#999] tracking-wide leading-relaxed">
+            武汉民宿<br />智能分析与决策
           </p>
         </div>
       )}
@@ -269,7 +269,7 @@ const MainLayout: React.FC = () => {
         {/* Footer */}
         <Footer className="!bg-transparent text-center py-8">
           <p className="text-xs text-[#999] tracking-wide">
-            Wuhan B&B Intelligence System ©{new Date().getFullYear()}
+            武汉民宿智策 ©{new Date().getFullYear()}
           </p>
         </Footer>
       </Layout>
