@@ -7,6 +7,18 @@ import { ZEN_COLORS } from '../utils/echartsTheme';
 import { getDistricts, getFacilityPremium, type DistrictStats, type FacilityPremium } from '../services/analysisApi';
 import { getListings, type ListingItem } from '../services/listingsApi';
 
+/** 接口可能返回空字符串；聚合行表示「该行政区下未维护商圈」的样本 */
+function tradeAreaCellLabel(tradeArea: string | null | undefined): { label: string; isMissing: boolean } {
+  const t = typeof tradeArea === 'string' ? tradeArea.trim() : '';
+  if (t) return { label: t, isMissing: false };
+  return { label: '未标注商圈', isMissing: true };
+}
+
+function listingLocationLine(item: ListingItem): string {
+  const parts = [item.district, item.trade_area?.trim()].filter((p): p is string => Boolean(p && String(p).trim()));
+  return parts.length ? parts.join(' · ') : '—';
+}
+
 const Analysis: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [districtStats, setDistrictStats] = useState<DistrictStats[]>([]);
@@ -73,11 +85,19 @@ const Analysis: React.FC = () => {
       title: '商圈名称',
       dataIndex: 'trade_area',
       key: 'trade_area',
-      render: (text: string, record: DistrictStats) => (
-        <Button type="link" className="h-auto p-0 font-medium text-[var(--ink-black)] hover:!text-[var(--ochre)]" onClick={() => handleDistrictClick(record.district)}>
-          {text}
-        </Button>
-      ),
+      render: (text: string, record: DistrictStats) => {
+        const { label, isMissing } = tradeAreaCellLabel(text);
+        return (
+          <Button
+            type="link"
+            title={isMissing ? '该分组房源未维护商圈字段，统计仍按行政区汇总' : undefined}
+            className={`h-auto p-0 font-medium hover:!text-[var(--ochre)] ${isMissing ? '!text-[var(--ink-muted)]' : 'text-[var(--ink-black)]'}`}
+            onClick={() => handleDistrictClick(record.district)}
+          >
+            {label}
+          </Button>
+        );
+      },
     },
     {
       title: '平均价格',
@@ -262,6 +282,7 @@ const Analysis: React.FC = () => {
                 title={<span className="font-medium text-[var(--ink-black)]">{item.title}</span>}
                 description={
                   <div className="text-sm text-[var(--ink-light)]">
+                    <div className="mb-1 text-[var(--ink-muted)]">{listingLocationLine(item)}</div>
                     <span>卧室 {item.bedroom_count} 间</span>
                     <span className="ml-4">床位 {item.bed_count} 张</span>
                   </div>

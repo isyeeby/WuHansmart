@@ -11,6 +11,23 @@ import { addFavorite, removeFavorite } from '../services/favoritesApi';
 
 const { Option } = Select;
 
+/** Select 的 value 须为可稳定比较的值；数组引用每次渲染不同会导致无法选中 */
+const PRICE_RANGE_KEYS = ['0-100', '100-200', '200-300', '300-500', '500-1000'] as const;
+type PriceRangeKey = (typeof PRICE_RANGE_KEYS)[number];
+
+const PRICE_RANGE_MAP: Record<PriceRangeKey, [number, number]> = {
+  '0-100': [0, 100],
+  '100-200': [100, 200],
+  '200-300': [200, 300],
+  '300-500': [300, 500],
+  '500-1000': [500, 1000],
+};
+
+function priceRangeFromFormValue(v: string | undefined): [number, number] | undefined {
+  if (!v || !(v in PRICE_RANGE_MAP)) return undefined;
+  return PRICE_RANGE_MAP[v as PriceRangeKey];
+}
+
 const Listings: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [listings, setListings] = useState<ListingItem[]>([]);
@@ -55,13 +72,14 @@ const Listings: React.FC = () => {
   };
 
   const handleSearch = (values: any) => {
+    const pr = priceRangeFromFormValue(values.priceRange);
     setCurrentPage(1);
     fetchListings({
       page: 1,
       size: pageSize,
       district: values.district,
-      min_price: values.priceRange?.[0],
-      max_price: values.priceRange?.[1],
+      min_price: pr?.[0],
+      max_price: pr?.[1],
       bedroom_count: values.bedroomCount,
       sort_by: values.sortBy,
     });
@@ -71,12 +89,13 @@ const Listings: React.FC = () => {
     setCurrentPage(page);
     if (size) setPageSize(size);
     const values = form.getFieldsValue();
+    const pr = priceRangeFromFormValue(values.priceRange);
     fetchListings({
       page,
       size: size || pageSize,
       district: values.district,
-      min_price: values.priceRange?.[0],
-      max_price: values.priceRange?.[1],
+      min_price: pr?.[0],
+      max_price: pr?.[1],
       bedroom_count: values.bedroomCount,
       sort_by: values.sortBy,
     });
@@ -180,11 +199,11 @@ const Listings: React.FC = () => {
               <Col xs={24} sm={12} md={8} lg={6}>
                 <Form.Item name="priceRange" label={<span className="text-[var(--ink-light)]">价格区间</span>} className="!mb-3">
                   <Select placeholder="全部" allowClear size="large" className="w-full">
-                    <Option value={[0, 100]}>100 元以下</Option>
-                    <Option value={[100, 200]}>100 — 200 元</Option>
-                    <Option value={[200, 300]}>200 — 300 元</Option>
-                    <Option value={[300, 500]}>300 — 500 元</Option>
-                    <Option value={[500, 1000]}>500 元以上</Option>
+                    <Option value="0-100">100 元以下</Option>
+                    <Option value="100-200">100 — 200 元</Option>
+                    <Option value="200-300">200 — 300 元</Option>
+                    <Option value="300-500">300 — 500 元</Option>
+                    <Option value="500-1000">500 元以上</Option>
                   </Select>
                 </Form.Item>
               </Col>
@@ -224,15 +243,19 @@ const Listings: React.FC = () => {
             {listings.length > 0 ? (
               <>
                 <List
+                  className="listings-result-list"
                   grid={{ gutter: [16, 22], xs: 1, sm: 2, md: 3, lg: 4, xl: 4, xxl: 4 }}
                   dataSource={listings}
                   renderItem={item => {
                     const isFavorite = favorites.has(item.unit_id);
                     const tags = parseTags(item.house_tags);
                     return (
-                      <List.Item className="!mb-0 !border-none !p-0">
-                        <div className="group relative h-full">
-                          <Link to={`/listing/${item.unit_id}`} className="flex h-full flex-col overflow-hidden rounded-xl border border-[var(--paper-warm)] bg-[var(--paper-white)] no-underline shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-medium)]">
+                      <List.Item className="!mb-0 !h-full !border-none !p-0">
+                        <div className="group relative flex h-full min-h-0 w-full flex-col">
+                          <Link
+                            to={`/listing/${item.unit_id}`}
+                            className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[var(--paper-warm)] bg-[var(--paper-white)] no-underline shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-medium)]"
+                          >
                             <div className="relative aspect-[4/3] overflow-hidden bg-[var(--paper-cream)]">
                               <img
                                 alt=""
@@ -257,28 +280,33 @@ const Listings: React.FC = () => {
                                 </Tag>
                               )}
                             </div>
-                            <div className="flex flex-1 flex-col p-4">
+                            <div className="flex min-h-0 flex-1 flex-col p-4">
                               <div className="line-clamp-2 min-h-[2.5rem] text-sm font-medium leading-snug text-[var(--ink-black)] group-hover:text-[var(--ochre)]">
                                 {item.title}
                               </div>
-                              <div className="mt-2 flex items-center gap-1 text-xs text-[var(--ink-muted)]">
+                              <div className="mt-2 flex shrink-0 items-center gap-1 text-xs text-[var(--ink-muted)]">
                                 <EnvironmentOutlined className="shrink-0 text-[var(--gold)]" />
                                 <span className="truncate">
                                   {item.district} · {item.trade_area}
                                 </span>
                               </div>
-                              <div className="mt-2 flex min-h-[1.75rem] flex-wrap items-center gap-1.5">
+                              {/* 固定两行标签区高度，避免同排卡片因换行参差不齐 */}
+                              <div
+                                className="listing-card-tags mt-2 flex h-[3.625rem] flex-wrap content-start gap-1.5 overflow-hidden"
+                                aria-label={tags.length ? '房源标签' : undefined}
+                              >
                                 {tags.length > 0 ? (
                                   tags.map((tag, idx) => (
-                                    <Tag key={idx} className="!m-0 !border-[var(--paper-warm)] !bg-[var(--paper-cream)] !text-xs !text-[var(--ink-light)]">
-                                      {tag}
+                                    <Tag
+                                      key={idx}
+                                      className="!m-0 !max-w-full !border-[var(--paper-warm)] !bg-[var(--paper-cream)] !text-xs !text-[var(--ink-light)]"
+                                    >
+                                      <span className="inline-block max-w-[10.5rem] truncate align-bottom sm:max-w-[12rem]" title={tag}>
+                                        {tag}
+                                      </span>
                                     </Tag>
                                   ))
-                                ) : (
-                                  <span className="text-[10px] text-transparent select-none" aria-hidden>
-                                    ·
-                                  </span>
-                                )}
+                                ) : null}
                               </div>
                               <div className="mt-3 flex flex-1 flex-col justify-end border-t border-[var(--paper-warm)] pt-3">
                                 <div className="flex items-end justify-between gap-2">

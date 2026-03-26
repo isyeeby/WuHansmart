@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="&#x5BBF;">
+  <!-- Larger glyph, thinner frame stroke for small-tab legibility -->
+  <rect
+    x="4"
+    y="4"
+    width="92"
+    height="92"
+    rx="9"
+    fill="#faf8f5"
+    stroke="#1a1a1a"
+    stroke-width="2.75"
+  />
+  <text
+    x="50"
+    y="51"
+    text-anchor="middle"
+    dominant-baseline="central"
+    fill="#1a1a1a"
+    font-family="Noto Serif SC, Source Han Serif SC, SimSun, NSimSun, Songti SC, STSong, serif"
+    font-size="74"
+    font-weight="700"
+  >&#x5BBF;</text>
+</svg>
