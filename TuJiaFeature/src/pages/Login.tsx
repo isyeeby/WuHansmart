@@ -192,11 +192,6 @@ const Login: React.FC = () => {
             </TabPane>
 
             <TabPane tab="注册" key="register">
-              <p className="mb-4 text-xs leading-relaxed text-[var(--ink-muted)]">
-                用户名 <strong className="text-[var(--ink-black)]">3～50</strong> 个字符；密码至少{' '}
-                <strong className="text-[var(--ink-black)]">6</strong> 位，最长{' '}
-                <strong className="text-[var(--ink-black)]">72</strong> 个字符（与后端校验、加密算法一致）。
-              </p>
               <Form
                 onFinish={onRegister}
                 layout="vertical"
