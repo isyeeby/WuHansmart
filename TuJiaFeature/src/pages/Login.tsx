@@ -34,10 +34,10 @@ const Login: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          username: values.username,
+          username: String(values.username).trim(),
           password: values.password,
-          phone: values.phone,
-          full_name: values.full_name,
+          phone: values.phone?.trim?.() || undefined,
+          full_name: values.full_name?.trim?.() || undefined,
         }),
       });
       
@@ -55,7 +55,19 @@ const Login: React.FC = () => {
       }
       
       if (!response.ok) {
-        throw new Error(data.detail || `注册失败 (${response.status})`);
+        const detail = data.detail;
+        let msg: string;
+        if (Array.isArray(detail)) {
+          msg = detail
+            .map((e: { msg?: string }) => e?.msg)
+            .filter(Boolean)
+            .join('；') || `注册失败 (${response.status})`;
+        } else if (typeof detail === 'string') {
+          msg = detail;
+        } else {
+          msg = `注册失败 (${response.status})`;
+        }
+        throw new Error(msg);
       }
 
       message.success('注册成功，请登录');
@@ -180,6 +192,11 @@ const Login: React.FC = () => {
             </TabPane>
 
             <TabPane tab="注册" key="register">
+              <p className="mb-4 text-xs leading-relaxed text-[var(--ink-muted)]">
+                用户名 <strong className="text-[var(--ink-black)]">3～50</strong> 个字符；密码至少{' '}
+                <strong className="text-[var(--ink-black)]">6</strong> 位，最长{' '}
+                <strong className="text-[var(--ink-black)]">72</strong> 个字符（与后端校验、加密算法一致）。
+              </p>
               <Form
                 onFinish={onRegister}
                 layout="vertical"
@@ -187,11 +204,16 @@ const Login: React.FC = () => {
               >
                 <Form.Item
                   name="username"
-                  rules={[{ required: true, message: '请输入用户名' }]}
+                  rules={[
+                    { required: true, message: '请输入用户名' },
+                    { min: 3, message: '用户名至少 3 个字符' },
+                    { max: 50, message: '用户名最多 50 个字符' },
+                  ]}
+                  validateTrigger={['onBlur', 'onChange']}
                   className="mb-4"
                 >
                   <Input
-                    placeholder="用户名"
+                    placeholder="用户名（3～50 字符）"
                     allowClear
                     prefix={<UserOutlined />}
                     className="login-zen-control"
@@ -201,11 +223,16 @@ const Login: React.FC = () => {
 
                 <Form.Item
                   name="password"
-                  rules={[{ required: true, message: '请输入密码' }]}
+                  rules={[
+                    { required: true, message: '请输入密码' },
+                    { min: 6, message: '密码至少 6 位' },
+                    { max: 72, message: '密码最长 72 个字符' },
+                  ]}
+                  validateTrigger={['onBlur', 'onChange']}
                   className="mb-4"
                 >
                   <Input.Password
-                    placeholder="密码"
+                    placeholder="密码（至少 6 位）"
                     prefix={<LockOutlined />}
                     className="login-zen-control"
                     autoComplete="new-password"
