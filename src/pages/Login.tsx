@@ -130,9 +130,9 @@ const Login: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}
-            className="text-xs uppercase tracking-[0.25em] text-[var(--ink-muted)]"
+            className="text-xs tracking-wide text-[var(--ink-muted)]"
           >
-            Price Intelligence System
+            民宿价格智能分析与决策
           </motion.p>
         </div>
 
