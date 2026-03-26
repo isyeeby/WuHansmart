@@ -417,7 +417,6 @@ const Home: React.FC = () => {
 
         <div className="relative grid items-center gap-10 border-b border-[var(--paper-warm)] pb-12 lg:grid-cols-12 lg:gap-8">
           <div className="lg:col-span-7">
-            <Text className="mb-3 block text-xs font-medium uppercase tracking-[0.2em] text-[var(--ink-muted)]">经营驾驶舱</Text>
             <Title
               level={2}
               className="home-hero-main-title !mb-4 !mt-0 !text-3xl !font-semibold !tracking-tight text-[var(--ink-black)] sm:!text-4xl"

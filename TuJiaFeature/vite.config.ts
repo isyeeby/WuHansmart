@@ -8,6 +8,7 @@ export default defineConfig(({mode}) => {
   return {
     plugins: [react(), tailwindcss()],
     build: {
+      // 部署提示：index.html 勿长期强缓存（如 Cache-Control: no-cache），否则发版后仍引用旧 chunk 名会 404。
       rollupOptions: {
         output: {
           manualChunks(id) {
