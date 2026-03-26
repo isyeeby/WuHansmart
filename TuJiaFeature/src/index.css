@@ -3,10 +3,25 @@
 
 /* Tailwind v4 compatible base styles */
 @layer base {
+  html {
+    overflow-x: clip;
+  }
+
   body {
     font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    overflow-x: clip;
+  }
+}
+
+/* 小屏下输入框至少 16px，避免 iOS 聚焦时整页缩放 */
+@media (max-width: 639px) {
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-affix-wrapper input,
+  .ant-input-password {
+    font-size: 16px !important;
   }
 }
 

@@ -81,7 +81,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center paper-texture relative overflow-hidden">
+    <div className="relative flex min-h-[100dvh] min-h-screen items-center justify-center overflow-x-clip overflow-y-auto paper-texture px-3 py-8 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
       {/* 水墨背景装饰 */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 right-0 w-1/2 h-full opacity-[0.03]">
@@ -106,7 +106,7 @@ const Login: React.FC = () => {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
-        className="login-shell relative z-10 w-full max-w-md px-6 sm:px-8"
+        className="login-shell relative z-10 w-full max-w-md px-1 sm:px-8"
       >
         {/* Logo 区域 */}
         <div className="mb-14 text-center sm:mb-16">
@@ -141,7 +141,7 @@ const Login: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6, duration: 0.6 }}
-          className="login-zen-panel px-8 py-9 sm:px-10 sm:py-10"
+          className="login-zen-panel px-5 py-8 sm:px-10 sm:py-10"
         >
           <Tabs
             activeKey={activeTab}

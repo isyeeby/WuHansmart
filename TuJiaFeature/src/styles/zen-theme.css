@@ -1664,6 +1664,27 @@ body {
   overflow: hidden;
 }
 
+/* ─── 主布局顶栏：刘海屏安全区 + 响应式水平内边距 ─── */
+.main-layout-header {
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding-top: max(0px, env(safe-area-inset-top, 0px));
+}
+
+@media (min-width: 640px) {
+  .main-layout-header {
+    padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .main-layout-header {
+    padding-left: max(2rem, env(safe-area-inset-left, 0px));
+    padding-right: max(2rem, env(safe-area-inset-right, 0px));
+  }
+}
+
 /* ─── 房源列表 · 栅格卡片同排等高（antd List grid：Row → 宽度 div → Col → .ant-list-item） ─── */
 .listings-result-list.ant-list-grid .ant-list-container.ant-row {
   align-items: stretch;

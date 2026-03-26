@@ -11,7 +11,6 @@ import {
   LogoutOutlined,
   MenuOutlined,
   HeartOutlined,
-  BarChartOutlined,
   SettingOutlined,
   CompassOutlined,
   HomeOutlined,
@@ -40,6 +39,8 @@ const MainLayout: React.FC = () => {
   const [drawerVisible, setDrawerVisible] = useState(false);
   const screens = useBreakpoint();
   const isMobile = !screens.lg;
+  /** 抽屉内始终展示完整侧栏文案（避免桌面折叠态带到小屏只剩图标） */
+  const showSideMeta = isMobile || !collapsed;
 
   // 获取当前选中的菜单项
   const getSelectedKeys = () => {
@@ -123,7 +124,7 @@ const MainLayout: React.FC = () => {
           <div className="w-10 h-10 border-2 border-[#1a1a1a] flex items-center justify-center flex-shrink-0">
             <span className="font-serif text-lg font-bold text-[#1a1a1a]">宿</span>
           </div>
-          {!collapsed && (
+          {showSideMeta && (
             <div className="overflow-hidden">
               <h1 className="font-serif text-base font-semibold text-[#1a1a1a] leading-tight whitespace-nowrap">民宿智策</h1>
               <p className="text-[10px] text-[#999] tracking-wider uppercase whitespace-nowrap">Intelligence</p>
@@ -155,7 +156,7 @@ const MainLayout: React.FC = () => {
       />
 
       {/* Footer */}
-      {!collapsed && (
+      {showSideMeta && (
         <div className="px-6 py-6 border-t border-[#ebe7e0]">
           <p className="text-xs text-[#999] tracking-wide leading-relaxed">
             武汉民宿<br />智能分析与决策
@@ -200,7 +201,7 @@ const MainLayout: React.FC = () => {
           placement="left"
           onClose={() => setDrawerVisible(false)}
           open={drawerVisible}
-          width={280}
+          width="min(300px, 88vw)"
           closable={false}
           styles={{ body: { padding: 0, background: '#faf8f5' } }}
         >
@@ -215,44 +216,49 @@ const MainLayout: React.FC = () => {
         }}
       >
         {/* Header */}
-        <Header
-          className="!bg-white/80 backdrop-blur-sm border-b border-[#ebe7e0] sticky top-0 z-50"
-          style={{
-            padding: '0 32px',
-            height: 72,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <div className="flex items-center gap-6">
+        <Header className="main-layout-header !flex !h-14 !items-center !justify-between !border-b !border-[#ebe7e0] !bg-white/80 !py-0 backdrop-blur-sm sm:!h-[4.5rem] sticky top-0 z-50">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-6">
             {isMobile && (
-              <MenuOutlined
-                className="text-xl cursor-pointer text-[#4a4a4a] hover:text-[#1a1a1a] transition-colors"
+              <button
+                type="button"
+                aria-label="打开导航菜单"
+                className="-ml-1 flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-[#4a4a4a] transition-colors hover:bg-[#f5f2ed] hover:text-[#1a1a1a]"
                 onClick={() => setDrawerVisible(true)}
-              />
+              >
+                <MenuOutlined className="text-xl" />
+              </button>
             )}
-            <Breadcrumb
-              items={getBreadcrumbItems()}
-              className="text-sm"
-            />
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <Breadcrumb
+                items={getBreadcrumbItems()}
+                className="text-xs sm:text-sm [&_li]:max-w-full [&_li:last-child]:truncate [&_ol]:flex-nowrap [&_ol]:overflow-hidden"
+              />
+            </div>
           </div>
 
-          <Dropdown menu={userMenu} placement="bottomRight" arrow>
-            <Space className="cursor-pointer hover:bg-[#f5f2ed] px-4 py-2 rounded transition-colors">
-              <div className="w-8 h-8 rounded-full bg-[#1a1a1a] flex items-center justify-center">
-                <UserOutlined className="text-white text-sm" />
+          <Dropdown menu={userMenu} placement="bottomRight" arrow trigger={['click']}>
+            <Space className="ml-2 shrink-0 cursor-pointer rounded-lg px-2 py-2 transition-colors hover:bg-[#f5f2ed] sm:px-4">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1a1a1a] sm:h-8 sm:w-8">
+                <UserOutlined className="text-sm text-white" />
               </div>
-              <div className="hidden md:flex flex-col leading-tight">
-                <span className="text-sm font-medium text-[#1a1a1a]">{user?.username || '管理员'}</span>
-                <span className="text-xs text-[#999]">系统用户</span>
+              <div className="hidden min-w-0 sm:flex md:flex-col md:leading-tight">
+                <span className="max-w-[8rem] truncate text-sm font-medium text-[#1a1a1a]">
+                  {user?.username || '管理员'}
+                </span>
+                <span className="hidden text-xs text-[#999] md:inline">系统用户</span>
               </div>
             </Space>
           </Dropdown>
         </Header>
 
         {/* Content */}
-        <Content style={{ margin: '32px', overflow: 'initial' }}>
+        <Content
+          className="!mx-3 !mb-4 !mt-3 overflow-x-clip sm:!mx-6 sm:!mb-6 sm:!mt-5 lg:!m-8"
+          style={{
+            overflow: 'initial',
+            paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+          }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -267,7 +273,7 @@ const MainLayout: React.FC = () => {
         </Content>
 
         {/* Footer */}
-        <Footer className="!bg-transparent text-center py-8">
+        <Footer className="!bg-transparent px-3 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4 text-center sm:py-8">
           <p className="text-xs text-[#999] tracking-wide">
             武汉民宿智策 ©{new Date().getFullYear()}
           </p>
