@@ -1,0 +1,1 @@
+const i=new Map,n=new Map;function l(e,a,c){const u=Date.now(),t=i.get(e);if(t&&t.expiresAt>u)return Promise.resolve(t.value);const s=n.get(e);if(s)return s;const o=(async()=>{try{const r=await c();return i.set(e,{value:r,expiresAt:Date.now()+a}),r}finally{n.delete(e)}})();return n.set(e,o),o}export{l as c};

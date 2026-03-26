@@ -15,7 +15,6 @@ Thumbs.db
 
 # --- 前端 TuJiaFeature ---
 TuJiaFeature/node_modules/
-TuJiaFeature/dist/
 TuJiaFeature/build/
 TuJiaFeature/coverage/
 
