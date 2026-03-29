@@ -16,6 +16,7 @@
 |------|------|----------|
 | 首页「智能推荐」横向条 | `GET /api/home/recommendations` | MySQL 候选（登录可带行政区/价滤）+ 内存重排：`_scene_purpose_bonus` + 设施标签命中加分；**不是** `get_condition_based_recommendations`。见 [`home.py`](../app/api/endpoints/home.py)。 |
 | 个性化推荐页 | `GET /api/recommend` | 下文 §1–§4。 |
+| **房源列表按行为排序** | `GET /api/listings?sort_by=personalized` + 可选 JWT | **规则重排**：收藏/浏览 → 偏好行政区、商圈各 Top5 → SQL `CASE` 匹配分 → 再按 `favorite_count`；**不读**相似度矩阵，**不经** `recommend.py`。详见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md)。 |
 | 详情页「相似房源」 | `GET /api/listings/{unit_id}/similar` | 同区、同卧室、价格接近排序；**不读** `listing_similarity_*.npz`。 |
 | 基于矩阵的相似 | `GET /api/recommend/similar/{homestay_id}` | `RecommendationService.get_similar_homestays`；**当前前端业务页未使用**（`recommendApi.getSimilarListings` 无引用）。 |
 

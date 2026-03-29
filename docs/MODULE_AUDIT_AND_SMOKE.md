@@ -9,11 +9,11 @@
 | 认证与安全 | `/login` | `/api/auth` | 无 token 时 `get_current_user_id` 仍等价于演示用户；多租户隔离不成立 | 写明「演示环境」；生产需严格 JWT |
 | 首页 | `/` | `/api/home`、`/api/home/recommendations` | 统计等走 `home`；**智能推荐条**专走 `recommendations`（SQL+场景/设施重排），**非** `/api/recommend` | 与 DATA_LAYER 对照样本量；勿与推荐页算法混称 |
 | 驾驶舱 | `/dashboard` | `/api/dashboard` | KPI、趋势中部分为启发式或日历代理指标 | 以接口 `kpi_definitions`/`series_note` 为准，勿当真实入住率 |
-| 房源列表/详情 | `/listings`, `/listing/:id` | `/api/listings` | 依赖库内 listings；与两 JSON 交集定义可能不一致 | 论文声明分析母体 |
-| 数据分析 | `/analysis` | `/api/analysis` | 分布/机会/ROI 为统计或规则聚合，非订单事实 | 脚注「平台挂牌口径」 |
+| 房源列表/详情 | `/listings`, `/listing/:id` | `/api/listings`（含 `keyword`、`sort_by=personalized`） | 依赖库内 listings；`personalized` 为规则区域重排，见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md) | 论文声明分析母体 |
+| 数据分析 | `/analysis` | `/api/analysis` | 分布/机会/ROI 为统计或规则聚合，非订单事实；`/roi-ranking` 返回 `{ data, field_glossary }` | 脚注「平台挂牌口径」；glossary 区分综合分与财务 ROI |
 | 价格预测 | `/prediction` | `/api/predict` | 节假日硬编码、forecast/trend 示意或随机种子、无模型时启发式 | 看 `methodology`/`data_kind` |
 | 推荐 | `/recommendation` | `/api/recommend` | 默认带出行目的时主路径为条件匹配+读库 `scene_scores`；矩阵用于扩展/协同；无模型时扩展弱、可热门兜底 | 见 RECOMMENDATION_ONLINE_BEHAVIOR |
-| 投资与机会 | `/investment`, `/opportunities` | `/api/investment` | 假设参数、启发式入住代理 | 敏感性说明 |
+| 投资与机会 | `/investment`, `/opportunities` | `/api/investment` | 假设参数、启发式需求代理；敏感性矩阵分母可传 `baseline_capital_yuan`；`opportunities` 的 `max_budget`(万元) 按日价×20×12 年化毛收入过滤 | 见 `calculation_basis` / `field_glossary` |
 | 对比 | `/comparison` | `/api/compare` | 评分基于本次选集归一化 | 响应内 `scoring_methodology` |
 | 我的房源/竞品页 | `/my-listings`, `/competitor` | `/api/my-listings` | 竞品池=同区；排序=距离优先；非「同户型竞品」 | 称「周边参照」或后续加户型过滤 |
 | 收藏与历史 | `/favorites` | `/api/favorites`, `/api/user/me/*` | 与 user 路由并存 | 实现以 favoritesApi 为准 |
@@ -61,8 +61,8 @@ pytest tests/test_smoke_routes.py -v
 1. 登录（`demo` / `demo123` 或你的账号）。
 2. **首页**：统计、推荐、热力图区域加载。
 3. **Dashboard**：summary、kpi、图表、热力图说明。
-4. **房源列表 → 详情**：分页、详情、收藏按钮（若启用）。
-5. **收藏**：列表、文件夹（若有）、浏览历史写入。
+4. **房源列表 → 详情**：分页、关键词筛选、排序含「按偏好」、详情、收藏按钮（若启用）。
+5. **收藏 / 浏览**：列表、文件夹（若有）；详情加载后写入浏览历史（供列表 `personalized` 与推荐侧使用）。
 6. **推荐**：换区/刷新有结果。
 7. **数据分析**：各 Tab 有数据或空态。
 8. **价格预测**：单次预测、趋势/因子等子功能。

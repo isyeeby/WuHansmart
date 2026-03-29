@@ -21,6 +21,25 @@ MIN_LISTINGS_PER_DISTRICT = 5
 # 单区日历天次低于该阈值则认为统计不稳，不用日历占比
 MIN_CALENDAR_ROWS_PER_DISTRICT = 200
 
+# 与 /api/investment/ranking、/api/analysis/roi-ranking 返回的 field_glossary 共用
+DISTRICT_ROI_RANKING_FIELD_GLOSSARY: Dict[str, str] = {
+    "roi_score": (
+        "0–100 综合吸引力分：日历/启发式需求代理、评分、价格带、供给规模加权；非财务年化收益率。"
+    ),
+    "occupancy_rate": (
+        "需求强度代理(%)：calendar_unavailable_share 时为日历不可订天次占比；"
+        "heuristic_rating_favorites 时为评分+收藏启发式；非 PMS 真实入住率。"
+    ),
+    "calendar_unavailable_share_pct": (
+        "与 occupancy_rate 同源，仅日历样本充足时有值；不可订天次/总天次×100。"
+    ),
+    "estimated_roi": (
+        "收入强度比：估算年毛收入÷(区日均×30)，非标准 ROI；"
+        "勿与投资计算器返回的 annual_roi（首付股本回报）混淆。"
+    ),
+    "revenue_intensity_ratio": "与 estimated_roi 同值，命名强调非财务 ROI。",
+}
+
 
 def _price_band_norm(avg_price: float) -> float:
     """适中均价映射到 0–100，供加权综合分使用。"""
@@ -176,6 +195,10 @@ def build_mysql_district_roi_rankings(
         estimated_roi = (
             (monthly_revenue * 12.0 / (avg_price * 30.0 + 1.0)) if avg_price > 0 else 0.0
         )
+        er_rounded = round(estimated_roi, 1)
+        calendar_unavailable_pct = (
+            round(occupancy_rate, 1) if occ_basis == "calendar_unavailable_share" else None
+        )
 
         risk_level = (
             "收益突出"
@@ -194,9 +217,11 @@ def build_mysql_district_roi_rankings(
                 "occupancy_rate": occupancy_rate,
                 "occupancy_basis": occ_basis,
                 "calendar_sample_rows": cal_n,
+                "calendar_unavailable_share_pct": calendar_unavailable_pct,
                 "recommendation": recommendation,
                 "estimated_monthly_revenue": round(monthly_revenue, 2),
-                "estimated_roi": round(estimated_roi, 1),
+                "estimated_roi": er_rounded,
+                "revenue_intensity_ratio": er_rounded,
                 "investment_score": inv_int,
                 "risk_level": risk_level,
                 "data_source_note": data_note,
@@ -231,6 +256,11 @@ def build_analysis_roi_ranking_rows(db: Session, limit: int) -> List[Dict[str, A
                 "occupancy_rate": row["occupancy_rate"],
                 "occupancy_basis": row["occupancy_basis"],
                 "calendar_sample_rows": row["calendar_sample_rows"],
+                "calendar_unavailable_share_pct": row.get(
+                    "calendar_unavailable_share_pct"
+                ),
+                "estimated_roi": row.get("estimated_roi"),
+                "revenue_intensity_ratio": row.get("revenue_intensity_ratio"),
                 "recommendation": rec,
                 "data_source_note": row["data_source_note"],
             }

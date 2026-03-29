@@ -66,6 +66,8 @@ Hive（清洗/分析/训练） ──导数脚本──► MySQL ──► FastA
 
 首页推荐 **`GET /api/home/recommendations`** 与个性化推荐 **`GET/POST /api/recommend`** 为**两套独立接口与实现**，**不合并**代码路径。差异见 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](RECOMMENDATION_ONLINE_BEHAVIOR.md) 与 [`USER_SURVEY_AND_RECOMMENDATION.md`](USER_SURVEY_AND_RECOMMENDATION.md)；**产品页面不向最终用户展示「双通道」文案**。
 
+**房源列表** `GET /api/listings?sort_by=personalized` 使用 `favorites` + `user_view_history` 做 **Top-K 行政区/商圈规则重排**（SQL `CASE`），**不经**上述推荐路由，亦**不读**离线相似度矩阵；原理见 [`LISTINGS_PERSONALIZED_SORT.md`](LISTINGS_PERSONALIZED_SORT.md)。
+
 ## 指标与「真实」口径
 
 部分接口返回 **启发式指数** 或 **示意序列**，与订单口径、财务 ROI 不同。详细对照见各接口 `description` 与响应内 `methodology` / `series_note` / `kpi_definitions`；聚合类指标线上以 **MySQL 表内数据** 为准。更多名词见 [`METRICS_GLOSSARY.md`](METRICS_GLOSSARY.md)。

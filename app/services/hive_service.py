@@ -385,11 +385,15 @@ class HiveDataService:
                             "roi_score": inv,
                             "avg_price": round(float(r.get("avg_price") or 0), 2),
                             "occupancy_rate": round(occ, 1),
+                            "occupancy_basis": "hive_ads_estimated_occupancy",
+                            "calendar_unavailable_share_pct": None,
+                            "calendar_sample_rows": None,
                             "recommendation": r.get("recommendation") or "",
                             "estimated_monthly_revenue": round(
                                 float(r.get("estimated_monthly_revenue") or 0), 2
                             ),
                             "estimated_roi": round(er, 1),
+                            "revenue_intensity_ratio": round(er, 1),
                             "investment_score": inv,
                             "risk_level": r.get("risk_level") or "",
                             "data_source_note": "hive_ads_roi",

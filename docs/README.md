@@ -25,6 +25,7 @@
 | 文档 | 说明 |
 |------|------|
 | [BACKEND_API_SPEC.md](BACKEND_API_SPEC.md) | **前后端共用**接口说明（含首页推荐条与 `/api/recommend` 区分） |
+| [LISTINGS_PERSONALIZED_SORT.md](LISTINGS_PERSONALIZED_SORT.md) | 房源列表 `sort_by=personalized`：**规则区域重排**原理及与推荐接口边界 |
 | [DASHBOARD_API.md](DASHBOARD_API.md) | `/api/dashboard/kpi`、`heatmap`、`top-districts` 等 |
 | [USER_SURVEY_AND_RECOMMENDATION.md](USER_SURVEY_AND_RECOMMENDATION.md) | 问卷落库、`/api/recommend` 补全、`/api/home/recommendations` 重排、前端入口 |
 | [RECOMMENDATION_ONLINE_BEHAVIOR.md](RECOMMENDATION_ONLINE_BEHAVIOR.md) | `/api/recommend` 分支；矩阵/冷启动；与首页、详情相似接口边界 |

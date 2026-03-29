@@ -2,7 +2,8 @@
 
 本文档以学位论文「问题建模—算法设计—特征工程—离线训练—在线推理—前后端联调」的常见写法组织，与仓库实现 `scripts/build_recommendation_model.py`（离线训练）、`app/services/recommender.py`（在线推理）、`app/services/model_manager.py`（模型管理）、`app/api/endpoints/recommend.py`（API 路由）以及前端 `Recommendation.tsx`、`recommendApi.ts` 保持一致。文中指标为**某次本地 MySQL 全量训练示例**，复现时以 `models/recommendation_meta_latest.json` 为准。
 
-> **线上接口边界**：`GET /api/recommend` 的分支顺序、**首页** `GET /api/home/recommendations`、详情 **`GET /api/listings/{id}/similar`** 与矩阵接口的差异，以 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](./RECOMMENDATION_ONLINE_BEHAVIOR.md)、[`USER_SURVEY_AND_RECOMMENDATION.md`](./USER_SURVEY_AND_RECOMMENDATION.md) 为准；本文侧重离线矩阵与条件/协同的**方法叙述**，不写首页 SQL 重排细节。
+> **线上接口边界**：`GET /api/recommend` 的分支顺序、**首页** `GET /api/home/recommendations`、详情 **`GET /api/listings/{id}/similar`** 与矩阵接口的差异，以 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](./RECOMMENDATION_ONLINE_BEHAVIOR.md)、[`USER_SURVEY_AND_RECOMMENDATION.md`](./USER_SURVEY_AND_RECOMMENDATION.md) 为准；本文侧重离线矩阵与条件/协同的**方法叙述**，不写首页 SQL 重排细节。  
+> **房源列表** `GET /api/listings?sort_by=personalized` 为 **联机规则重排**（收藏/浏览 → 偏好区 Top-K → SQL `CASE`），**不**使用本文所述相似度矩阵 \(\mathbf{S}\)；见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md)。
 
 > **写作定位**：仓库中的训练脚本在交互数据充足时，可将「用户行为相似度」与内容相似度做加权融合；在毕设/演示环境常见的行为稀疏情形下，矩阵**退化为纯内容相似度**。若论文以**基于内容的推荐（CBF）+ 多条件匹配**为主线，可将第 3.4–3.5 节作为可选扩展或附录，答辩口径与离线评估以**内容一致性指标**与**条件推荐流程**为主。
 
