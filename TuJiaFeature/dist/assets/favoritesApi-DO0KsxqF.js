@@ -1,0 +1,1 @@
+import{a as s}from"./index-CBGAh0pI.js";const o=async a=>(await s.post(`/api/favorites/${a}`)).data,r=async a=>{await s.delete(`/api/favorites/${a}`)},i=async()=>(await s.get("/api/favorites")).data,n=async()=>(await s.get("/api/favorites/folders")).data,p=async a=>{await s.post("/api/user/me/history",{unit_id:a})};export{i as a,p as b,o as c,n as g,r};
