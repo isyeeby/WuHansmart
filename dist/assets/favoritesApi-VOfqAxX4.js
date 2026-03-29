@@ -1,1 +1,0 @@
-import{a as e}from"./index-CdBHMTPZ.js";const o=async a=>(await e.post(`/api/favorites/${a}`)).data,r=async a=>{await e.delete(`/api/favorites/${a}`)},n=async()=>(await e.get("/api/favorites")).data,i=async()=>(await e.get("/api/favorites/folders")).data;export{n as a,o as b,i as g,r};
