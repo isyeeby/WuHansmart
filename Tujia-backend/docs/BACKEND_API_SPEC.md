@@ -182,9 +182,14 @@
 | max_price | float | 否 | 最高价格 | 价格上限 |
 | tags | string | 否 | 标签筛选 | 逗号分隔，如：近地铁,可做饭 |
 | bedroom_count | int | 否 | 卧室数 | 卧室数量筛选 |
+| keyword | string | 否 | 关键词 | 对 `title`、`district`、`trade_area` 做模糊匹配（LIKE，已转义 `%` `_`） |
 | sort_by | string | 否 | 排序方式 | 可选值见下表 |
 | page | int | 否 | 页码 | 默认1 |
 | size | int | 否 | 每页数量 | 默认20，最大100 |
+
+**请求头（可选）**：`sort_by=personalized` 时若携带有效 `Authorization: Bearer <JWT>`，服务端按当前用户 **收藏（权重 3）+ 浏览历史（权重 1）** 统计偏好行政区/商圈（各 Top5），列表优先匹配偏好再按收藏数降序；未登录或无效令牌时与 `favorite_count` 排序一致。
+
+**原理（答辩口径）**：**非**协同过滤矩阵路径，为联机 **SQL 规则重排**（`CASE` 区域匹配分 + `favorite_count`  tie-break）。与 `GET /api/recommend`、首页推荐条独立，详见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md)。
 
 **排序方式 (sort_by)**:
 
@@ -194,6 +199,7 @@
 | price_desc | 价格从高到低 |
 | rating | 评分从高到低 |
 | favorite_count | 收藏数从高到低（默认） |
+| personalized | 登录用户按行为偏好加权；未登录同 favorite_count |
 
 **响应示例**:
 ```json
@@ -1121,6 +1127,16 @@ Authorization: Bearer {token}
 | preferred_price_max | float | 否 | 最高价格偏好 | 价格偏好上限 |
 | travel_purpose | string | 否 | 出行目的 | 情侣/家庭/商务/考研 |
 | required_facilities | array | 否 | 必备设施 | 必须具备的设施列表 |
+
+---
+
+#### 3.10.3 浏览历史（与房源列表个性化排序）
+
+**接口**: `POST /api/user/me/history`（另有 `GET` 查询、`DELETE` 单条/清空，见实现 `user.py`）
+
+**用途**: 登录用户打开房源详情后由前端上报 `unit_id`，写入 `user_view_history`，供 **`GET /api/listings?sort_by=personalized`** 推断偏好行政区/商圈（规则与矩阵推荐分离，见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md)）。未登录不应调用。
+
+**请求体**: `{ "unit_id": "房源ID" }`（可选 `listing_data` 快照）
 
 ---
 

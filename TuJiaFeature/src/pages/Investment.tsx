@@ -171,7 +171,11 @@ export default function Investment() {
       key: 'district'
     },
     {
-      title: '投资评分',
+      title: (
+        <Tooltip title="0–100 综合吸引力分（多因子加权），非财务年化收益率">
+          <span>综合评分</span>
+        </Tooltip>
+      ),
       dataIndex: 'roi_score',
       key: 'roi_score',
       render: (score: number) => (
@@ -190,10 +194,26 @@ export default function Investment() {
       render: (price: number) => `¥${price}`
     },
     {
-      title: '入住率代理',
+      title: (
+        <Tooltip title="日历路径：不可订天次占比；否则：评分+收藏启发式。非真实入住率。">
+          <span>需求代理</span>
+        </Tooltip>
+      ),
       dataIndex: 'occupancy_rate',
       key: 'occupancy_rate',
-      render: (rate: number) => `${rate}%`
+      render: (rate: number, record: InvestmentRanking) => (
+        <Tooltip
+          title={
+            record.occupancy_basis === 'calendar_unavailable_share'
+              ? '日历不可订天次占比'
+              : record.occupancy_basis === 'hive_ads_estimated_occupancy'
+                ? '数仓 estimated_occupancy 字段（口径以离线 ETL 为准）'
+                : '评分+收藏启发式'
+          }
+        >
+          <span>{rate}%</span>
+        </Tooltip>
+      )
     },
     {
       title: '建议',
@@ -239,7 +259,11 @@ export default function Investment() {
       )
     },
     {
-      title: '预估年化收益',
+      title: (
+        <Tooltip title="简化示意：日租×20×12 相对日租×100 尺度，非购房 ROI，未扣运营成本">
+          <span>简化收益指标</span>
+        </Tooltip>
+      ),
       dataIndex: 'estimated_annual_roi',
       key: 'estimated_annual_roi',
       render: (roi: number) => (
@@ -263,7 +287,7 @@ export default function Investment() {
         <Panel header="数据来源与假设说明（投资分析三模块）" key="inv-meta">
           <ul className="text-sm text-[#666] space-y-2 list-disc pl-5 m-0">
             <li><strong>投资计算器</strong>：按表单公式计算，入住率、月供、运营成本等以您填写或默认假设为准。</li>
-            <li><strong>收益率排行</strong>：基于 listings 真实聚合均价与房源量；排行中的入住率为启发式代理，非订单口径。</li>
+            <li><strong>商圈排行</strong>：roi_score 为综合吸引力分；occupancy_rate 为需求代理（日历不可订占比或启发式），非真实入住率；estimated_roi 为收入强度比，与投资计算器 annual_roi（首付回报）不同。</li>
             <li><strong>投资机会</strong>：基于真实房源价与商圈中位价等规则估算潜力，非外部实时行情或承诺收益。</li>
           </ul>
         </Panel>

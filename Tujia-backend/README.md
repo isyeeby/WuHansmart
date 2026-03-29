@@ -206,6 +206,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 | GET | `/api/recommend/popular` | 热门房源 |
 | GET | `/api/listings/{unit_id}/similar` | 详情页规则相似（同区户型价近） |
 
+### 房源列表（筛选与行为排序）
+
+| 方法 | 端点 | 说明 |
+|------|------|------|
+| GET | `/api/listings` | 分页筛选；`keyword` 搜标题/区/商圈；`sort_by=personalized` + JWT 为 **规则区域重排**（见 [`docs/LISTINGS_PERSONALIZED_SORT.md`](docs/LISTINGS_PERSONALIZED_SORT.md)） |
+
 ## 两源数据与「完整房源」
 
 - **`tujia_calendar_data.json`**：价日历、截面价、经纬度等（文件很大，需流式解析）。

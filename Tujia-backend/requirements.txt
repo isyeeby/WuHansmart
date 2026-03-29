@@ -20,6 +20,8 @@ aiomysql==0.2.0
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# passlib 1.7.4 与 bcrypt>=4 不兼容，登录 verify_password 会触发 ValueError（72 bytes）
+bcrypt>=3.2.2,<4.0.0
 python-multipart==0.0.9
 
 # ML/DL

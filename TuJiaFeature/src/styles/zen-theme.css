@@ -1710,3 +1710,99 @@ body {
   min-width: 0;
   width: 100%;
 }
+
+/* ─── 房源列表 · 筛选条（压低体量、竹青晕、不抢主内容） ─── */
+.listings-filter-panel.zen-panel {
+  border-radius: 10px !important;
+  box-shadow: 0 1px 10px rgba(0, 0, 0, 0.035) !important;
+}
+
+.listings-filter-panel.zen-panel:hover {
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.045) !important;
+}
+
+.listings-filter-panel .ant-card-head {
+  min-height: 0 !important;
+  padding: 8px 14px 6px !important;
+  border-bottom: 1px solid var(--paper-warm) !important;
+  background: linear-gradient(180deg, rgba(90, 138, 110, 0.045) 0%, transparent 72%);
+}
+
+.listings-filter-panel .ant-card-head-title {
+  padding-block: 0 !important;
+}
+
+.listings-filter-panel .ant-card-head .ant-typography {
+  font-size: 11px !important;
+  letter-spacing: 0.12em !important;
+}
+
+.listings-filter-panel .ant-card-body {
+  padding: 8px 12px 10px !important;
+}
+
+.listings-filter-label {
+  display: block;
+  margin-bottom: 2px !important;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+
+.listings-filter-form .ant-form-item-label {
+  padding-bottom: 0 !important;
+}
+
+.listings-filter-form .ant-form-item-label > label {
+  height: auto !important;
+}
+
+.listings-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem 0.65rem;
+}
+
+.listings-filter-item {
+  flex: 1 1 auto;
+  min-width: min(100%, 7.5rem);
+}
+
+.listings-filter-item--keyword {
+  flex: 1 1 200px;
+  min-width: min(100%, 220px);
+}
+
+.listings-filter-action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 1px;
+}
+
+.listings-filter-panel .ant-input-affix-wrapper,
+.listings-filter-panel .ant-input:not(textarea),
+.listings-filter-panel .ant-select .ant-select-selector {
+  border-color: var(--paper-warm) !important;
+  background-color: var(--paper-white) !important;
+  border-radius: 8px !important;
+}
+
+.listings-filter-panel .ant-input-affix-wrapper:hover,
+.listings-filter-panel .ant-input:hover,
+.listings-filter-panel .ant-select:hover .ant-select-selector {
+  border-color: var(--paper-gray) !important;
+}
+
+.listings-filter-panel .listings-filter-keyword.ant-input-affix-wrapper {
+  box-shadow: none !important;
+}
+
+.listings-filter-panel .listings-filter-keyword.ant-input-affix-wrapper:focus,
+.listings-filter-panel .listings-filter-keyword.ant-input-affix-wrapper-focused {
+  border-color: rgba(90, 138, 110, 0.45) !important;
+  box-shadow: 0 0 0 2px rgba(90, 138, 110, 0.12) !important;
+}

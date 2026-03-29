@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { List, Tag, Button, Select, Form, Row, Col, Spin, Pagination, Empty, message } from 'antd';
-import { HeartOutlined, HeartFilled, EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
+import { List, Tag, Button, Select, Form, Spin, Pagination, Empty, message, Input } from 'antd';
+import { HeartOutlined, HeartFilled, EnvironmentOutlined, HomeOutlined, SearchOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { PageHeader } from '../components/common';
 import { ZenPanel, ZenSection } from '../components/zen/ZenPageBlocks';
@@ -26,6 +26,29 @@ const PRICE_RANGE_MAP: Record<PriceRangeKey, [number, number]> = {
 function priceRangeFromFormValue(v: string | undefined): [number, number] | undefined {
   if (!v || !(v in PRICE_RANGE_MAP)) return undefined;
   return PRICE_RANGE_MAP[v as PriceRangeKey];
+}
+
+type ListingsFilterFormValues = {
+  district?: string;
+  bedroomCount?: number;
+  priceRange?: string;
+  sortBy?: ListingsQueryParams['sort_by'];
+  keyword?: string;
+};
+
+function listingsQueryFromFormValues(values: ListingsFilterFormValues, page: number, size: number): ListingsQueryParams {
+  const pr = priceRangeFromFormValue(values.priceRange);
+  const kw = values.keyword?.trim();
+  return {
+    page,
+    size,
+    district: values.district,
+    min_price: pr?.[0],
+    max_price: pr?.[1],
+    bedroom_count: values.bedroomCount,
+    sort_by: values.sortBy,
+    ...(kw ? { keyword: kw } : {}),
+  };
 }
 
 const Listings: React.FC = () => {
@@ -71,34 +94,18 @@ const Listings: React.FC = () => {
     }
   };
 
-  const handleSearch = (values: any) => {
-    const pr = priceRangeFromFormValue(values.priceRange);
+  const handleSearch = (values: ListingsFilterFormValues) => {
     setCurrentPage(1);
-    fetchListings({
-      page: 1,
-      size: pageSize,
-      district: values.district,
-      min_price: pr?.[0],
-      max_price: pr?.[1],
-      bedroom_count: values.bedroomCount,
-      sort_by: values.sortBy,
-    });
+    fetchListings(listingsQueryFromFormValues(values, 1, pageSize));
   };
 
   const handlePageChange = (page: number, size?: number) => {
     setCurrentPage(page);
     if (size) setPageSize(size);
     const values = form.getFieldsValue();
-    const pr = priceRangeFromFormValue(values.priceRange);
-    fetchListings({
-      page,
-      size: size || pageSize,
-      district: values.district,
-      min_price: pr?.[0],
-      max_price: pr?.[1],
-      bedroom_count: values.bedroomCount,
-      sort_by: values.sortBy,
-    });
+    fetchListings(
+      listingsQueryFromFormValues(values, page, size || pageSize),
+    );
   };
 
   const toggleFavorite = async (unitId: string, isFavorite: boolean) => {
@@ -168,66 +175,70 @@ const Listings: React.FC = () => {
   const uniqueDistricts = Array.from(new Set(districts.map(d => d.district)));
 
   return (
-    <div className="listings-shell space-y-10 pb-10 sm:space-y-12">
-      <PageHeader title="房源列表" subtitle="浏览武汉市民宿房源，支持多条件筛选与排序" category="Listings" />
+    <div className="listings-shell space-y-6 pb-10 sm:space-y-8">
+      <PageHeader title="房源列表" subtitle="关键词搜索、筛选与排序；登录后可选按浏览与收藏偏好排序" category="Listings" />
 
-      <ZenSection title="筛选条件" accent="jade">
-        <ZenPanel accent="jade" title="筛选与排序">
-          <Form form={form} layout="vertical" className="listings-filter-form" onFinish={handleSearch}>
-            <Row gutter={[16, 8]}>
-              <Col xs={24} sm={12} md={8} lg={5}>
-                <Form.Item name="district" label={<span className="text-[var(--ink-light)]">行政区</span>} className="!mb-3">
-                  <Select placeholder="全部" allowClear size="large" className="w-full">
-                    {uniqueDistricts.map(district => (
-                      <Option key={district} value={district}>
-                        {district}
-                      </Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={5}>
-                <Form.Item name="bedroomCount" label={<span className="text-[var(--ink-light)]">卧室数</span>} className="!mb-3">
-                  <Select placeholder="全部" allowClear size="large" className="w-full">
-                    <Option value={1}>1 室</Option>
-                    <Option value={2}>2 室</Option>
-                    <Option value={3}>3 室</Option>
-                    <Option value={4}>4 室及以上</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={6}>
-                <Form.Item name="priceRange" label={<span className="text-[var(--ink-light)]">价格区间</span>} className="!mb-3">
-                  <Select placeholder="全部" allowClear size="large" className="w-full">
-                    <Option value="0-100">100 元以下</Option>
-                    <Option value="100-200">100 — 200 元</Option>
-                    <Option value="200-300">200 — 300 元</Option>
-                    <Option value="300-500">300 — 500 元</Option>
-                    <Option value="500-1000">500 元以上</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={5}>
-                <Form.Item name="sortBy" label={<span className="text-[var(--ink-light)]">排序</span>} className="!mb-3">
-                  <Select placeholder="默认" allowClear size="large" className="w-full">
-                    <Option value="favorite_count">收藏数</Option>
-                    <Option value="price_asc">价格从低到高</Option>
-                    <Option value="price_desc">价格从高到低</Option>
-                    <Option value="rating">评分</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={3} className="flex items-end">
-                <Form.Item label=" " className="!mb-3 w-full" colon={false}>
-                  <Button type="primary" htmlType="submit" size="large" block className="!h-10 !border-none !bg-[var(--ink-black)] hover:!bg-[var(--ink-dark)]">
-                    搜索
-                  </Button>
-                </Form.Item>
-              </Col>
-            </Row>
-          </Form>
-        </ZenPanel>
-      </ZenSection>
+      <ZenPanel accent="jade" title="筛选与搜索" titleCaps={false} className="listings-filter-panel">
+        <Form form={form} layout="vertical" className="listings-filter-form" onFinish={handleSearch}>
+          <div className="listings-filter-toolbar">
+            <Form.Item
+              name="keyword"
+              label={<span className="listings-filter-label">关键词</span>}
+              className="listings-filter-item listings-filter-item--keyword !mb-0"
+            >
+              <Input
+                allowClear
+                placeholder="标题、行政区或商圈"
+                size="middle"
+                className="listings-filter-keyword"
+                prefix={<SearchOutlined className="text-[var(--ink-muted)]" aria-hidden />}
+                onPressEnter={() => form.submit()}
+                autoComplete="off"
+              />
+            </Form.Item>
+            <Form.Item name="district" label={<span className="listings-filter-label">行政区</span>} className="listings-filter-item !mb-0">
+              <Select placeholder="全部" allowClear size="middle" className="w-full min-w-[6.5rem]">
+                {uniqueDistricts.map(district => (
+                  <Option key={district} value={district}>
+                    {district}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+            <Form.Item name="bedroomCount" label={<span className="listings-filter-label">卧室</span>} className="listings-filter-item !mb-0">
+              <Select placeholder="全部" allowClear size="middle" className="w-full min-w-[5.5rem]">
+                <Option value={1}>1 室</Option>
+                <Option value={2}>2 室</Option>
+                <Option value={3}>3 室</Option>
+                <Option value={4}>4 室+</Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="priceRange" label={<span className="listings-filter-label">价格</span>} className="listings-filter-item !mb-0">
+              <Select placeholder="全部" allowClear size="middle" className="w-full min-w-[7.5rem]">
+                <Option value="0-100">100 元以下</Option>
+                <Option value="100-200">100 — 200</Option>
+                <Option value="200-300">200 — 300</Option>
+                <Option value="300-500">300 — 500</Option>
+                <Option value="500-1000">500 元以上</Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="sortBy" label={<span className="listings-filter-label">排序</span>} className="listings-filter-item !mb-0">
+              <Select placeholder="默认收藏数" allowClear size="middle" className="w-full min-w-[8.5rem]">
+                <Option value="favorite_count">收藏数</Option>
+                <Option value="personalized">按偏好（登录）</Option>
+                <Option value="price_asc">价低→高</Option>
+                <Option value="price_desc">价高→低</Option>
+                <Option value="rating">评分</Option>
+              </Select>
+            </Form.Item>
+            <div className="listings-filter-action">
+              <Button type="primary" htmlType="submit" size="middle" className="listings-filter-apply !h-9 !min-w-[5.5rem] !border-none !px-4 !text-sm !bg-[var(--ink-black)] hover:!bg-[var(--ink-dark)]">
+                应用
+              </Button>
+            </div>
+          </div>
+        </Form>
+      </ZenPanel>
 
       <ZenSection title="房源结果" accent="ink">
         <ZenPanel

@@ -45,7 +45,8 @@ export interface ListingsQueryParams {
   max_price?: number;
   tags?: string; // 逗号分隔，如：近地铁,可做饭
   bedroom_count?: number;
-  sort_by?: 'price_asc' | 'price_desc' | 'rating' | 'favorite_count';
+  keyword?: string;
+  sort_by?: 'price_asc' | 'price_desc' | 'rating' | 'favorite_count' | 'personalized';
   page?: number;
   size?: number;
 }

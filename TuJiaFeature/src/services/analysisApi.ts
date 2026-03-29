@@ -61,6 +61,12 @@ export interface ROIRanking {
   avg_price: number;
   occupancy_rate: number;
   recommendation: string;
+  occupancy_basis?: string;
+  calendar_sample_rows?: number | null;
+  calendar_unavailable_share_pct?: number | null;
+  estimated_roi?: number | null;
+  revenue_intensity_ratio?: number | null;
+  data_source_note?: string;
 }
 
 // 房源列表项类型 (保留兼容)
@@ -156,5 +162,8 @@ export const getROIRanking = async (limit?: number): Promise<ROIRanking[]> => {
   const response = await apiClient.get('/api/analysis/roi-ranking', {
     params: { limit }
   });
-  return response.data;
+  const raw = response.data;
+  if (Array.isArray(raw)) return raw;
+  if (raw?.data && Array.isArray(raw.data)) return raw.data;
+  return [];
 };

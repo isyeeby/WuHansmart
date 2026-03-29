@@ -4,17 +4,56 @@
 房源列表模块 API
 基于真实Hive/MySQL数据
 """
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, asc
-from typing import List, Optional
+from sqlalchemy import func, desc, asc, or_, case
+from typing import List, Optional, Tuple
 import json
 
 from app.models import schemas
-from app.db.database import get_db, Listing, PriceCalendar
-# from app.core.security import get_current_user_id  # 暂时不需要
+from app.core.security import get_optional_user
+from app.db.database import get_db, get_user_by_username, Listing, PriceCalendar, Favorite, UserViewHistory
 
 router = APIRouter(tags=["房源列表"])
+
+
+def _escape_like_pattern(s: str) -> str:
+    """转义 LIKE 通配符，配合 escape='\\\\' 使用。"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _user_preference_regions(db: Session, user_id: int, top_n: int = 5) -> Tuple[List[str], List[str]]:
+    """根据收藏（权 3）与浏览历史（权 1）统计偏好行政区、商圈，各取 top_n。"""
+    c_d: Counter = Counter()
+    c_t: Counter = Counter()
+
+    fav_q = (
+        db.query(Listing.district, Listing.trade_area)
+        .join(Favorite, Favorite.unit_id == Listing.unit_id)
+        .filter(Favorite.user_id == user_id)
+    )
+    for d, ta in fav_q.all():
+        if d:
+            c_d[str(d).strip()] += 3
+        if ta:
+            c_t[str(ta).strip()] += 3
+
+    hist_q = (
+        db.query(Listing.district, Listing.trade_area)
+        .join(UserViewHistory, UserViewHistory.unit_id == Listing.unit_id)
+        .filter(UserViewHistory.user_id == user_id)
+    )
+    for d, ta in hist_q.all():
+        if d:
+            c_d[str(d).strip()] += 1
+        if ta:
+            c_t[str(ta).strip()] += 1
+
+    top_d = [k for k, _ in c_d.most_common(top_n) if k]
+    top_t = [k for k, _ in c_t.most_common(top_n) if k]
+    return top_d, top_t
 
 
 def _listing_to_detail_response(listing: Listing) -> schemas.ListingDetailResponse:
@@ -49,18 +88,21 @@ async def get_listings(
     max_price: Optional[float] = Query(None, description="最高价格"),
     tags: Optional[str] = Query(None, description="标签筛选（逗号分隔）"),
     bedroom_count: Optional[int] = Query(None, description="卧室数"),
-    sort_by: Optional[str] = Query("favorite_count", description="排序方式: price_asc, price_desc, rating, favorite_count"),
+    keyword: Optional[str] = Query(None, max_length=120, description="关键词：标题/行政区/商圈模糊匹配"),
+    sort_by: Optional[str] = Query(
+        "favorite_count",
+        description="排序: price_asc, price_desc, rating, favorite_count, personalized（登录后按收藏+浏览偏好）",
+    ),
     page: int = Query(1, ge=1, description="页码"),
     size: int = Query(20, ge=1, le=100, description="每页数量"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_username: Optional[str] = Depends(get_optional_user),
 ):
     """
     获取房源列表（分页、筛选、排序）
     """
-    # 构建查询
     query = db.query(Listing)
-    
-    # 筛选条件
+
     if district:
         query = query.filter(Listing.district == district)
     if business_circle:
@@ -72,28 +114,55 @@ async def get_listings(
     if bedroom_count:
         query = query.filter(Listing.bedroom_count == bedroom_count)
     if tags:
-        tag_list = tags.split(',')
+        tag_list = tags.split(",")
         for tag in tag_list:
             query = query.filter(Listing.house_tags.contains(tag))
-    
-    # 排序
+    if keyword and keyword.strip():
+        pat = f"%{_escape_like_pattern(keyword.strip())}%"
+        query = query.filter(
+            or_(
+                Listing.title.like(pat, escape="\\"),
+                Listing.district.like(pat, escape="\\"),
+                Listing.trade_area.like(pat, escape="\\"),
+            )
+        )
+
     sort_mapping = {
         "price_asc": asc(Listing.final_price),
         "price_desc": desc(Listing.final_price),
         "rating": desc(Listing.rating),
-        "favorite_count": desc(Listing.favorite_count)
+        "favorite_count": desc(Listing.favorite_count),
     }
-    query = query.order_by(sort_mapping.get(sort_by, desc(Listing.favorite_count)))
-    
-    # 分页
+
+    if sort_by == "personalized":
+        user_row = None
+        if current_username:
+            user_row = get_user_by_username(db, username=current_username)
+        if user_row:
+            dlist, tlist = _user_preference_regions(db, user_row.id)
+            whens = []
+            if dlist:
+                whens.append((Listing.district.in_(dlist), 2))
+            if tlist:
+                whens.append((Listing.trade_area.in_(tlist), 1))
+            if whens:
+                pref = case(*whens, else_=0)
+                query = query.order_by(desc(pref), desc(Listing.favorite_count))
+            else:
+                query = query.order_by(desc(Listing.favorite_count))
+        else:
+            query = query.order_by(desc(Listing.favorite_count))
+    else:
+        query = query.order_by(sort_mapping.get(sort_by, desc(Listing.favorite_count)))
+
     total = query.count()
     items = query.offset((page - 1) * size).limit(size).all()
-    
+
     return schemas.ListingListResponse(
         total=total,
         page=page,
         size=size,
-        items=[schemas.ListingListItem.model_validate(item) for item in items]
+        items=[schemas.ListingListItem.model_validate(item) for item in items],
     )
 
 

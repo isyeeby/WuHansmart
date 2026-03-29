@@ -327,7 +327,16 @@ async def get_roi_ranking(
     """
     各行政区综合排名（MySQL）：优先用价格日历不可订天次占比作需求代理，与评分、均价带、供给规模加权；
     日历样本不足的区用评分+收藏启发式兜底（见返回字段 occupancy_basis）。
-    """
-    from app.services.district_ranking_service import build_analysis_roi_ranking_rows
 
-    return build_analysis_roi_ranking_rows(db, limit)
+    返回体为 `{ "data": [...], "field_glossary": {...} }`，与旧版「纯数组」相比多一层包装；`data` 每行含
+    calendar_unavailable_share_pct、estimated_roi、revenue_intensity_ratio 等显义字段。
+    """
+    from app.services.district_ranking_service import (
+        DISTRICT_ROI_RANKING_FIELD_GLOSSARY,
+        build_analysis_roi_ranking_rows,
+    )
+
+    return {
+        "data": build_analysis_roi_ranking_rows(db, limit),
+        "field_glossary": DISTRICT_ROI_RANKING_FIELD_GLOSSARY,
+    }

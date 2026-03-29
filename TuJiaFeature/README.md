@@ -15,6 +15,7 @@
 2. **商圈分析**：价格、热度对比  
 3. **智能定价预测**：XGBoost 演示  
 4. **房源推荐**：首页「智能推荐」走 **`/api/home/recommendations`**（SQL+场景/设施重排）；「个性化推荐」页走 **`/api/recommend`**（条件匹配为主，见后端 `RECOMMENDATION_ONLINE_BEHAVIOR.md`）  
+5. **房源列表**：紧凑筛选；关键词搜索（标题/行政区/商圈，参数 `keyword`）；登录用户可选「按偏好排序」（`sort_by=personalized`，**规则区域重排**，原理见后端 [`docs/LISTINGS_PERSONALIZED_SORT.md`](../Tujia-backend/docs/LISTINGS_PERSONALIZED_SORT.md)）；详情页会写入浏览历史（见后端 PRD 1.4）  
 
 ## 文档（勿在本仓库重复维护长文）
 

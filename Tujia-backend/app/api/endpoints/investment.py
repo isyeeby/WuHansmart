@@ -4,6 +4,7 @@
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Query, HTTPException, status
+from app.services.district_ranking_service import DISTRICT_ROI_RANKING_FIELD_GLOSSARY
 from app.services.hive_service import hive_service
 
 router = APIRouter()
@@ -178,7 +179,13 @@ def get_cashflow_forecast(
 def get_sensitivity_analysis(
     district: str = Query(..., description="商圈名称"),
     base_price: float = Query(200, description="基础日租金"),
-    base_occupancy: float = Query(0.65, description="基础入住率")
+    base_occupancy: float = Query(0.65, description="基础入住率"),
+    baseline_capital_yuan: float = Query(
+        500_000,
+        ge=10_000,
+        le=1e9,
+        description="示意基准本金(元)，作矩阵中年化收益率分母，非具体标的成交价",
+    ),
 ):
     """
     敏感性分析
@@ -203,8 +210,12 @@ def get_sensitivity_analysis(
             monthly_revenue = price * 30 * occ
             monthly_cost = 3000  # 假设固定成本
             monthly_net = monthly_revenue - monthly_cost
-            annual_roi = (monthly_net * 12) / 500000 * 100  # 假设50万投资
-            
+            annual_roi = (
+                (monthly_net * 12) / baseline_capital_yuan * 100
+                if baseline_capital_yuan > 0
+                else 0.0
+            )
+
             row.append({
                 "price": round(price, 2),
                 "occupancy": round(occ, 2),
@@ -217,9 +228,15 @@ def get_sensitivity_analysis(
         "district": district,
         "base_price": avg_price,
         "base_occupancy": base_occupancy,
+        "baseline_capital_yuan": baseline_capital_yuan,
         "price_variations": ["-20%", "-10%", "基准", "+10%", "+20%"],
         "occupancy_variations": ["50%", "60%", "65%", "70%", "80%"],
-        "sensitivity_matrix": sensitivity_matrix
+        "sensitivity_matrix": sensitivity_matrix,
+        "assumptions": [
+            f"矩阵中年化收益率 = (月净收入×12) / {int(baseline_capital_yuan)} 元 × 100%，"
+            "月净收入 = 日租金×30×入住率 − 固定月成本(3000)；仅作情景弹性示意。",
+            "未绑定具体房源或购房首付，与「投资计算器」中的 annual_roi 口径不同。",
+        ],
     }
 
 
@@ -273,7 +290,11 @@ def get_investment_ranking(
                 "/api/analysis/roi-ranking 与 investment/ranking（MySQL）共用 district_ranking_service，"
                 "分析接口仅多返回四档 recommendation 文案。"
             ),
-            "per_row_fields": "occupancy_basis、calendar_sample_rows、data_source_note",
+            "per_row_fields": (
+                "occupancy_basis、calendar_sample_rows、data_source_note、"
+                "calendar_unavailable_share_pct、estimated_roi、revenue_intensity_ratio"
+            ),
+            "field_glossary": DISTRICT_ROI_RANKING_FIELD_GLOSSARY,
         },
     }
 
@@ -281,7 +302,13 @@ def get_investment_ranking(
 @router.get("/opportunities")
 def get_investment_opportunities(
     min_roi: float = Query(10.0, description="最小收益率"),
-    max_budget: Optional[float] = Query(None, description="最大预算（万元）")
+    max_budget: Optional[float] = Query(
+        None,
+        description=(
+            "可选：年化毛收入上限（万元），过滤满足 日挂牌价×20×12 ≤ 预算×10000 的房源；"
+            "非购房总价，与简化收益口径一致"
+        ),
+    ),
 ):
     """
     投资机会推荐
@@ -309,12 +336,30 @@ def get_investment_opportunities(
     # 过滤
     filtered = [o for o in opportunities if o.get('estimated_annual_roi', 0) >= min_roi]
 
+    if max_budget is not None and max_budget > 0:
+        cap_yuan = max_budget * 10_000
+        filtered = [
+            o
+            for o in filtered
+            if float(o.get("current_price") or 0) * 20 * 12 <= cap_yuan
+        ]
+
+    assumptions = [
+        "每月按20天入住计算",
+        "未考虑运营成本",
+        "投资成本按日租金×100估算",
+    ]
+    if max_budget is not None and max_budget > 0:
+        assumptions.append(
+            f"max_budget={max_budget} 万元：按「日挂牌价×20×12 ≤ 预算×10000 元」过滤年化毛收入尺度，非购房总价。"
+        )
+
     return {
         "data": sorted(filtered, key=lambda x: x.get('estimated_annual_roi', 0), reverse=True),
         "data_source_note": "价格洼地基于XGBoost模型预测价与实际挂牌价的差异计算，预估收益为简化模型计算结果",
         "calculation_basis": {
             "predicted_price_source": "XGBoost模型或行政区中位数",
             "estimated_roi_formula": "日租金 × 20天 × 12月 / 投资成本 × 100%",
-            "assumptions": ["每月按20天入住计算", "未考虑运营成本", "投资成本按日租金×100估算"]
-        }
+            "assumptions": assumptions,
+        },
     }

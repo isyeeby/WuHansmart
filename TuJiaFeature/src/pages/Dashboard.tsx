@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
-import { Card, Col, Row, Typography, Spin, Alert } from 'antd';
+import { Card, Col, Row, Typography, Spin, Alert, Tooltip } from 'antd';
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
@@ -10,6 +10,7 @@ import {
   WarningOutlined,
   StarOutlined,
   ShopOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { PageHeader } from '../components/common';
 import { ZenPanel, ZenSection } from '../components/zen/ZenPageBlocks';
@@ -18,6 +19,10 @@ import { getDistricts, getPriceDistribution, type DistrictStats, type PriceDistr
 import { getKpiDashboard, getHeatmapData, getTopDistricts, getDashboardTrends, getDashboardAlerts, type KpiData, type HeatmapPoint, type TopDistrict, type TrendData, type AlertItem } from '../services/dashboardApi';
 
 const { Text } = Typography;
+
+/** 与后端 /api/dashboard/heatmap、/top-districts 的「热度」口径一致（展示分 20～100） */
+const DASHBOARD_HEAT_TOOLTIP =
+  '热度展示分（20～100）：按「行政区+商圈」聚合。先算 raw = ln(1+房源数)×14 + 评分×9 + ln(1+均收藏)×5；再按 raw 全局排名映射——第 1 名 100，每降一名减 1，最低 20（避免 min–max 在「多数很热、少数极冷」时几乎全显示 100）。排序：raw 降序，并列看房源数与名称；条形图与榜单同源；条形图最多 16 条，榜单默认 10 条。';
 
 // 禅意统计卡片
 const StatCard: React.FC<{
@@ -173,7 +178,7 @@ const Dashboard: React.FC = () => {
     }],
   };
 
-  // 商圈热度：按热度值横向条形图（原散点气泡图不易对比，改为条形排行）
+  // 商圈热度：与「热门商圈榜单」同一综合分，横向条形取前 16 条
   const heatRanked = useMemo(() => {
     return [...heatmapData].sort((a, b) => b.value - a.value).slice(0, 16);
   }, [heatmapData]);
@@ -189,7 +194,12 @@ const Dashboard: React.FC = () => {
         },
       };
     }
-    const maxV = Math.max(...heatRanked.map((d) => d.value), 1);
+    const values = heatRanked.map((d) => d.value);
+    const maxV = Math.max(...values, 1);
+    const minV = Math.min(...values);
+    // 后端按名次给分多在 85～100；不设 min 时轴从 0 起，条几乎全长同色，易被误认为「全是 100」
+    const axisMin = Math.max(0, minV - 8);
+    const span = Math.max(1, maxV - axisMin);
     return {
       tooltip: {
         trigger: 'axis',
@@ -207,6 +217,8 @@ const Dashboard: React.FC = () => {
       grid: { left: 4, right: 40, top: 12, bottom: 8, containLabel: true },
       xAxis: {
         type: 'value',
+        min: axisMin,
+        max: 100,
         name: '热度',
         nameTextStyle: { color: ZEN_COLORS.inkMuted, fontSize: 11 },
         splitLine: { lineStyle: { color: ZEN_COLORS.paperWarm, type: 'dashed' } },
@@ -233,9 +245,9 @@ const Dashboard: React.FC = () => {
           itemStyle: {
             borderRadius: [0, 4, 4, 0],
             color: (params: { value: number }) => {
-              const ratio = Number(params.value) / maxV;
-              if (ratio >= 0.85) return ZEN_COLORS.ochre;
-              if (ratio >= 0.55) return ZEN_COLORS.gold;
+              const ratio = (Number(params.value) - axisMin) / span;
+              if (ratio >= 0.66) return ZEN_COLORS.ochre;
+              if (ratio >= 0.33) return ZEN_COLORS.gold;
               return ZEN_COLORS.jade;
             },
           },
@@ -343,7 +355,16 @@ const Dashboard: React.FC = () => {
             </ZenPanel>
           </Col>
           <Col xs={24} lg={12}>
-            <ZenPanel accent="ochre" title="商圈热度分布">
+            <ZenPanel
+              accent="ochre"
+              titleCaps={false}
+              title="核心商圈热度（条形图）"
+              extra={
+                <Tooltip title={DASHBOARD_HEAT_TOOLTIP} placement="left">
+                  <QuestionCircleOutlined className="cursor-help text-[var(--ink-muted)]" aria-label="热度定义" />
+                </Tooltip>
+              }
+            >
               <ReactECharts option={heatmapOption} style={{ height: heatChartHeight }} />
             </ZenPanel>
           </Col>
@@ -359,7 +380,16 @@ const Dashboard: React.FC = () => {
             </ZenPanel>
           </Col>
           <Col xs={24} lg={15}>
-            <ZenPanel accent="gold" title="热门商圈排行">
+            <ZenPanel
+              accent="gold"
+              titleCaps={false}
+              title="热门商圈榜单"
+              extra={
+                <Tooltip title={`${DASHBOARD_HEAT_TOOLTIP} 下列表另含挂牌均价、套数、相对全市均价溢价率。`} placement="left">
+                  <QuestionCircleOutlined className="cursor-help text-[var(--ink-muted)]" aria-label="热度与榜单说明" />
+                </Tooltip>
+              }
+            >
               <div className="flex max-h-[min(420px,58vh)] flex-col gap-2 overflow-y-auto pr-1">
                 {topDistricts.map((district, index) => (
                   <div
@@ -376,7 +406,7 @@ const Dashboard: React.FC = () => {
                       </span>
                       <div className="min-w-0">
                         <span className="block truncate font-medium text-[var(--ink-black)]">{district.name}</span>
-                        <span className="text-xs text-[var(--ink-muted)]">热度 {district.heat}</span>
+                        <span className="text-xs text-[var(--ink-muted)]">热度展示分 {district.heat}</span>
                       </div>
                     </div>
                     <div className="shrink-0 text-right">

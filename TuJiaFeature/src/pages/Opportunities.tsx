@@ -7,7 +7,8 @@ import {
   DollarOutlined,
   PercentageOutlined,
   StarOutlined,
-  ArrowRightOutlined
+  ArrowRightOutlined,
+  QuestionCircleOutlined
 } from '@ant-design/icons';
 import { 
   Card, 
@@ -73,11 +74,11 @@ export default function Opportunities() {
   // 生成ROI排名图表配置
   const getROIOption = () => {
     return {
-      title: { text: '商圈投资收益率排名' },
+      title: { text: '商圈投资吸引力排名' },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       xAxis: {
         type: 'value',
-        name: 'ROI评分'
+        name: '综合评分'
       },
       yAxis: {
         type: 'category',
@@ -263,7 +264,13 @@ export default function Opportunities() {
       )
     },
     {
-      title: '投资评分',
+      title: (
+        <Tooltip title="0–100 综合吸引力分（日历/启发式需求、评分、价格带、供给加权），非财务年化收益率">
+          <span className="inline-flex items-center gap-1">
+            综合评分 <QuestionCircleOutlined className="text-gray-400 text-xs" />
+          </span>
+        </Tooltip>
+      ),
       dataIndex: 'roi_score',
       key: 'roi_score',
       render: (score: number) => (
@@ -282,10 +289,28 @@ export default function Opportunities() {
       render: (price: number) => `¥${price}`
     },
     {
-      title: '预估入住率',
+      title: (
+        <Tooltip title="需求强度代理：日历路径为不可订天次占比；否则为评分+收藏启发式。非真实入住率。">
+          <span className="inline-flex items-center gap-1">
+            需求代理 <QuestionCircleOutlined className="text-gray-400 text-xs" />
+          </span>
+        </Tooltip>
+      ),
       dataIndex: 'occupancy_rate',
       key: 'occupancy_rate',
-      render: (rate: number) => `${rate}%`
+      render: (rate: number, row: ROIRanking) => (
+        <Tooltip
+          title={
+            row.occupancy_basis === 'calendar_unavailable_share'
+              ? `日历不可订占比 ${row.calendar_unavailable_share_pct ?? rate}%`
+              : row.occupancy_basis === 'heuristic_rating_favorites'
+                ? '评分+收藏启发式代理'
+                : row.occupancy_basis || '代理指标'
+          }
+        >
+          <span>{rate}%</span>
+        </Tooltip>
+      )
     },
     {
       title: '投资建议',
@@ -323,6 +348,10 @@ export default function Opportunities() {
                 <p>
                   「相对挂牌偏差」= (参考估算价 − 当前挂牌价) ÷ 当前挂牌价，仅表示<strong>统计模型与展示价之间的差异</strong>，
                   可能来自模型误差、房源信息不全、促销或特殊房型等，请结合详情页自行判断。
+                </p>
+                <p>
+                  右侧「商圈排名」中的分数为<strong>综合吸引力指数</strong>；表头「需求代理」不是 PMS 入住率。
+                  与「投资计算器」里的年化收益率口径不同。
                 </p>
               </div>
             }
@@ -389,7 +418,7 @@ export default function Opportunities() {
                 title={
                   <div className="flex items-center">
                     <TrophyOutlined className="mr-2 text-yellow-500" />
-                    <span>商圈投资排名</span>
+                    <span>商圈吸引力排名</span>
                   </div>
                 }
                 className="shadow-sm mb-6"
@@ -413,7 +442,7 @@ export default function Opportunities() {
             title={
               <div className="flex items-center">
                 <RiseOutlined className="mr-2 text-green-500" />
-                <span>投资收益率详细排名</span>
+                <span>商圈综合排名详情</span>
               </div>
             }
             className="shadow-sm"
@@ -428,7 +457,7 @@ export default function Opportunities() {
               </Col>
               <Col span={6}>
                 <Statistic
-                  title="最高ROI评分"
+                  title="最高综合分"
                   value={rankings[0]?.roi_score || 0}
                   suffix="分"
                 />
@@ -442,7 +471,7 @@ export default function Opportunities() {
               </Col>
               <Col span={6}>
                 <Statistic
-                  title="预估入住率"
+                  title="需求代理值"
                   value={rankings[0]?.occupancy_rate || 0}
                   suffix="%"
                 />
@@ -465,7 +494,7 @@ export default function Opportunities() {
             description={
               <div className="space-y-2">
                 <p>1. <strong>候选筛选</strong>：相对挂牌偏差 ≥ 阈值仅作排序线索，需核对房型、设施、日历价是否与模型假设一致</p>
-                <p>2. <strong>商圈选择</strong>：ROI 评分为启发式指数，可与下方商圈排名对照，勿当作财务结论</p>
+                <p>2. <strong>商圈选择</strong>：综合评分为多因子启发式指数，可与下方排名对照，勿当作财务 ROI 结论</p>
                 <p>3. <strong>风险控制</strong>：结合评分、评价与实拍，警惕信息不全或异常低价</p>
               </div>
             }

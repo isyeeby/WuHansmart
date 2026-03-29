@@ -2,7 +2,8 @@
 
 本文说明：**用户在问卷与个人资料中填写的偏好，如何进入在线推荐与首页展示**（实现于 2026-03 起迭代）。
 
-**仅针对 `GET /api/recommend`**：条件 vs 行为协同 vs 兜底 以 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](./RECOMMENDATION_ONLINE_BEHAVIOR.md) 为准。「个性化推荐」页默认带出行目的，主路径为 **条件匹配**，一般不走纯收藏/浏览协同。**首页推荐条**走 `/api/home/recommendations`，见下文 §「GET `/api/home/recommendations`」。
+**仅针对 `GET /api/recommend`**：条件 vs 行为协同 vs 兜底 以 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](./RECOMMENDATION_ONLINE_BEHAVIOR.md) 为准。「个性化推荐」页默认带出行目的，主路径为 **条件匹配**，一般不走纯收藏/浏览协同。**首页推荐条**走 `/api/home/recommendations`，见下文 §「GET `/api/home/recommendations`」。  
+**房源列表**「按偏好」排序走 `GET /api/listings?sort_by=personalized`，为 **规则区域重排**（与 `/api/recommend` 独立），见 [`LISTINGS_PERSONALIZED_SORT.md`](./LISTINGS_PERSONALIZED_SORT.md)。
 
 ## 数据落库
 
