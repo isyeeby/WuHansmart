@@ -6,7 +6,7 @@ import { motion } from 'motion/react';
 import { PageHeader } from '../components/common';
 
 import { getListingDetail, getListingGallery, getSimilarListings, getListingPriceCalendar, type ListingDetail, type ListingGallery, type SimilarListing, type ImageCategories, type PriceCalendarResponse } from '../services/listingsApi';
-import { addFavorite, removeFavorite } from '../services/favoritesApi';
+import { addFavorite, removeFavorite, addToHistory } from '../services/favoritesApi';
 import { PriceCalendar } from '../components/PriceCalendar';
 import { FacilityModulePanel, CommentModulePanel, LandlordModulePanel } from '../components/ListingDynamicModules';
 
@@ -64,6 +64,11 @@ const ListingDetail: React.FC = () => {
       setListing(listingData);
       setGallery(galleryData);
       setSimilarListings(similarData);
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('token')) {
+        addToHistory(unitId).catch(() => {
+          /* 静默失败，不影响详情展示 */
+        });
+      }
     } catch (error) {
       console.error('获取房源详情失败:', error);
       message.error('获取房源详情失败');

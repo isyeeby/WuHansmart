@@ -68,9 +68,11 @@ export interface SensitivityAnalysis {
   district: string;
   base_price: number;
   base_occupancy: number;
+  baseline_capital_yuan?: number;
   price_variations: string[];
   occupancy_variations: string[];
   sensitivity_matrix: SensitivityMatrixItem[][];
+  assumptions?: string[];
 }
 
 export interface InvestmentRanking {
@@ -79,6 +81,15 @@ export interface InvestmentRanking {
   avg_price: number;
   occupancy_rate: number;
   recommendation: string;
+  occupancy_basis?: string;
+  calendar_sample_rows?: number | null;
+  calendar_unavailable_share_pct?: number | null;
+  estimated_roi?: number | null;
+  revenue_intensity_ratio?: number | null;
+  estimated_monthly_revenue?: number;
+  investment_score?: number;
+  risk_level?: string;
+  data_source_note?: string;
 }
 
 export interface InvestmentRankingResponse {
@@ -140,12 +151,18 @@ export const getCashflowForecast = async (unitId: string, months: number = 24): 
  * 敏感性分析
  */
 export const getSensitivityAnalysis = async (
-  district: string, 
-  basePrice: number = 200, 
-  baseOccupancy: number = 0.65
+  district: string,
+  basePrice: number = 200,
+  baseOccupancy: number = 0.65,
+  baselineCapitalYuan: number = 500_000
 ): Promise<SensitivityAnalysis> => {
   const response = await apiClient.get('/api/investment/sensitivity-analysis', {
-    params: { district, base_price: basePrice, base_occupancy: baseOccupancy }
+    params: {
+      district,
+      base_price: basePrice,
+      base_occupancy: baseOccupancy,
+      baseline_capital_yuan: baselineCapitalYuan,
+    }
   });
   return response.data;
 };
