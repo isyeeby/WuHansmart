@@ -5,6 +5,7 @@ import os
 import json
 import joblib
 import logging
+import math
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -403,7 +404,7 @@ class ModelManager:
             is_large = 1 if (bedroom_count >= 4 or area >= 150) else 0
             is_budget = compute_is_budget_structural(area, bedroom_count)
             area_per_bedroom = area / (bedroom_count + 1)
-            heat_score = favorite_count * rating / 10
+            heat_score = rating * math.log(favorite_count + 1)
 
             # 设施数量：对 FACILITY_KEYWORDS 映射列求和，与训练时 facility_count 定义一致
             _fac_cols = ordered_facility_columns()

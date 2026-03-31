@@ -47,21 +47,21 @@ def _calendar_rows_to_dataframe(rows: List[PriceCalendar]) -> pd.DataFrame:
     return pd.DataFrame(data, columns=["unit_id", "date", "price", "can_booking"])
 
 
-def aggregate_calendar_by_units_from_rows(
-    rows: List[PriceCalendar],
-) -> pd.DataFrame:
+def aggregate_calendar_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    将 ORM 行聚合为每个 unit_id 一行日历特征。
-    周末定义：周六、周日（pandas dayofweek 5、6）。
+    将日频日历表聚合为每个 unit_id 一行特征。
+    要求列：unit_id, date, price, can_booking（与 ORM 导出一致）。
+    周末定义：周六、周日（dayofweek 5、6）。
     """
-    df = _calendar_rows_to_dataframe(rows)
     if df.empty:
         return pd.DataFrame(columns=["unit_id"] + CALENDAR_FEATURE_NAMES)
 
-    df["dt"] = pd.to_datetime(df["date"], errors="coerce")
-    df["is_weekend"] = df["dt"].dt.dayofweek.isin([5, 6])
+    work = df.copy()
+    work["unit_id"] = work["unit_id"].astype(str)
+    work["dt"] = pd.to_datetime(work["date"], errors="coerce")
+    work["is_weekend"] = work["dt"].dt.dayofweek.isin([5, 6])
 
-    g = df.groupby("unit_id", sort=False)
+    g = work.groupby("unit_id", sort=False)
     base = g.agg(
         cal_n_days=("price", "count"),
         cal_mean=("price", "mean"),
@@ -80,8 +80,8 @@ def aggregate_calendar_by_units_from_rows(
         base["cal_mean"].abs() + eps
     )
 
-    w_end = df[df["is_weekend"]].groupby("unit_id")["price"].mean()
-    w_day = df[~df["is_weekend"]].groupby("unit_id")["price"].mean()
+    w_end = work[work["is_weekend"]].groupby("unit_id")["price"].mean()
+    w_day = work[~work["is_weekend"]].groupby("unit_id")["price"].mean()
     merged = pd.DataFrame({"unit_id": base["unit_id"]})
     merged = merged.merge(
         w_end.rename("we"), left_on="unit_id", right_index=True, how="left"
@@ -97,6 +97,17 @@ def aggregate_calendar_by_units_from_rows(
         if c not in base.columns:
             base[c] = 0.0
     return base[["unit_id"] + CALENDAR_FEATURE_NAMES]
+
+
+def aggregate_calendar_by_units_from_rows(
+    rows: List[PriceCalendar],
+) -> pd.DataFrame:
+    """
+    将 ORM 行聚合为每个 unit_id 一行日历特征。
+    周末定义：周六、周日（pandas dayofweek 5、6）。
+    """
+    df = _calendar_rows_to_dataframe(rows)
+    return aggregate_calendar_dataframe(df)
 
 
 def load_calendar_aggregates_for_unit_ids(

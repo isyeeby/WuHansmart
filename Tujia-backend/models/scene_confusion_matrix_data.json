@@ -1,0 +1,150 @@
+{
+  "confusion_matrix": [
+    [358, 42, 8, 5, 3, 2, 1, 1],
+    [35, 332, 8, 3, 2, 0, 0, 0],
+    [10, 8, 258, 8, 4, 2, 0, 0],
+    [5, 3, 12, 198, 2, 0, 0, 0],
+    [3, 2, 5, 3, 127, 0, 0, 0],
+    [2, 1, 3, 2, 0, 68, 1, 1],
+    [1, 0, 0, 1, 0, 2, 176, 0],
+    [2, 1, 0, 1, 0, 1, 0, 120]
+  ],
+  "label_names": ["couple", "family", "business", "exam", "team_party", "medical", "pet_friendly", "long_stay"],
+  "label_names_cn": ["情侣出游", "家庭亲子", "商务差旅", "学生考研", "团建聚会", "医疗陪护", "宠物友好", "长租"],
+  "per_label_results": {
+    "couple": {
+      "true_positives": 358,
+      "false_positives": 58,
+      "true_negatives": 30,
+      "false_negatives": 0,
+      "precision": 0.8606,
+      "recall": 1.0,
+      "f1_score": 0.9251,
+      "n_positive": 358,
+      "n_predicted_positive": 416
+    },
+    "family": {
+      "true_positives": 332,
+      "false_positives": 57,
+      "true_negatives": 57,
+      "false_negatives": 0,
+      "precision": 0.8535,
+      "recall": 1.0,
+      "f1_score": 0.9210,
+      "n_positive": 332,
+      "n_predicted_positive": 389
+    },
+    "business": {
+      "true_positives": 258,
+      "false_positives": 36,
+      "true_negatives": 152,
+      "false_negatives": 0,
+      "precision": 0.8776,
+      "recall": 1.0,
+      "f1_score": 0.9348,
+      "n_positive": 258,
+      "n_predicted_positive": 294
+    },
+    "exam": {
+      "true_positives": 198,
+      "false_positives": 27,
+      "true_negatives": 221,
+      "false_negatives": 0,
+      "precision": 0.8800,
+      "recall": 1.0,
+      "f1_score": 0.9362,
+      "n_positive": 198,
+      "n_predicted_positive": 225
+    },
+    "team_party": {
+      "true_positives": 127,
+      "false_positives": 14,
+      "true_negatives": 305,
+      "false_negatives": 0,
+      "precision": 0.9007,
+      "recall": 1.0,
+      "f1_score": 0.9478,
+      "n_positive": 127,
+      "n_predicted_positive": 141
+    },
+    "medical": {
+      "true_positives": 68,
+      "false_positives": 10,
+      "true_negatives": 368,
+      "false_negatives": 0,
+      "precision": 0.8718,
+      "recall": 1.0,
+      "f1_score": 0.9315,
+      "n_positive": 68,
+      "n_predicted_positive": 78
+    },
+    "pet_friendly": {
+      "true_positives": 176,
+      "false_positives": 4,
+      "true_negatives": 266,
+      "false_negatives": 0,
+      "precision": 0.9778,
+      "recall": 1.0,
+      "f1_score": 0.9888,
+      "n_positive": 176,
+      "n_predicted_positive": 180
+    },
+    "long_stay": {
+      "true_positives": 120,
+      "false_positives": 5,
+      "true_negatives": 321,
+      "false_negatives": 0,
+      "precision": 0.9600,
+      "recall": 1.0,
+      "f1_score": 0.9796,
+      "n_positive": 120,
+      "n_predicted_positive": 125
+    }
+  },
+  "per_class_accuracy": {
+    "couple": {
+      "accuracy": 0.8606,
+      "correct": 358,
+      "total": 416
+    },
+    "family": {
+      "accuracy": 0.8535,
+      "correct": 332,
+      "total": 389
+    },
+    "business": {
+      "accuracy": 0.8776,
+      "correct": 258,
+      "total": 294
+    },
+    "exam": {
+      "accuracy": 0.8800,
+      "correct": 198,
+      "total": 225
+    },
+    "team_party": {
+      "accuracy": 0.9007,
+      "correct": 127,
+      "total": 141
+    },
+    "medical": {
+      "accuracy": 0.8718,
+      "correct": 68,
+      "total": 78
+    },
+    "pet_friendly": {
+      "accuracy": 0.9778,
+      "correct": 176,
+      "total": 180
+    },
+    "long_stay": {
+      "accuracy": 0.9600,
+      "correct": 120,
+      "total": 125
+    }
+  },
+  "test_size": 446,
+  "total_counted": 1848,
+  "micro_f1": 0.8928,
+  "macro_f1": 0.8488
+}

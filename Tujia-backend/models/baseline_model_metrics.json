@@ -1,0 +1,88 @@
+{
+  "data_source": "local JSON (hive_import)",
+  "linear_regression": {
+    "impl": "equal-weight avg: Poly+PCA+Ridge ‖ Nyström-RBF+Ridge (log1p)",
+    "ridge_alpha_poly_branch": 1831.0991642315716,
+    "ridge_alpha_nystroem_branch": 0.31622776601683794,
+    "ridge_cv": 5,
+    "ridge_scoring": "neg_mean_squared_error",
+    "pca_n_components": 320,
+    "pca_explained_variance_ratio_sum": 0.9757584050737776,
+    "n_poly_features": 2774,
+    "nystroem_n_components": 420,
+    "voting_weights": "equal (default)",
+    "train": {
+      "mae": 45.28085526053719,
+      "rmse": 67.8950293931779,
+      "r2": 0.6396424891243485,
+      "mape": 21.94202134227586
+    },
+    "test": {
+      "mae": 57.774898919217804,
+      "rmse": 131.6804159698207,
+      "r2": 0.4380364574671227,
+      "mape": 25.90207164997944
+    }
+  },
+  "gradient_boosting": {
+    "hyperparams": {
+      "max_iter": 500,
+      "learning_rate": 0.04,
+      "max_depth": 4,
+      "max_leaf_nodes": 24,
+      "min_samples_leaf": 28,
+      "l2_regularization": 12.0,
+      "max_bins": 255,
+      "early_stopping": true,
+      "validation_fraction": 0.18,
+      "n_iter_no_change": 12,
+      "random_state": 42
+    },
+    "impl": "sklearn HistGradientBoostingRegressor",
+    "aligned_with": "HistGB 超参在 XGB 量级基础上加强 L2/浅树/早停，减轻过拟合",
+    "train": {
+      "mae": 25.963903600860313,
+      "rmse": 44.13779144757817,
+      "r2": 0.8477073956301888,
+      "mape": 12.785728352762577
+    },
+    "test": {
+      "mae": 42.89577759108616,
+      "rmse": 110.46631959537505,
+      "r2": 0.604519083673404,
+      "mape": 18.0327877761634
+    }
+  },
+  "xgboost": {
+    "mae": 18.268583204688095,
+    "rmse": 32.331170727991854,
+    "r2": 0.9120817963766814,
+    "mape": 9.274984124749771
+  },
+  "comparison": {
+    "test_mae": {
+      "lr": 57.774898919217804,
+      "rf": 42.89577759108616,
+      "xgb": 18.268583204688095
+    },
+    "test_mape": {
+      "lr": 25.90207164997944,
+      "rf": 18.0327877761634,
+      "xgb": 9.274984124749771
+    },
+    "test_r2": {
+      "lr": 0.4380364574671227,
+      "rf": 0.604519083673404,
+      "xgb": 0.9120817963766814
+    }
+  },
+  "feature_count": 73,
+  "sample_count_train": 1949,
+  "sample_count_test": 488,
+  "methodology_notes": [
+    "数据来源: local JSON (hive_import)；stratified_holdout + preprocess_after_split（与 train_model_mysql 一致）",
+    "log1p/expm1 目标；样本权重与 train_xgb_model 一致",
+    "线性：VotingRegressor — Poly+PCA+Ridge 与 Nyström-RBF+Ridge 在 log1p 上等权，加权 RidgeCV",
+    "树基线：HistGradientBoosting（浅树、高 L2、大叶宽、max_leaf_nodes、18% 留出早停）"
+  ]
+}

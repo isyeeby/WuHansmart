@@ -1,12 +1,12 @@
 {
   "cal_n_days": 0.0,
-  "cal_mean": 303.15555555555557,
-  "cal_std": 101.83060290758317,
-  "cal_min": 169.0,
-  "cal_max": 608.0,
-  "cal_median": 270.0,
-  "cal_cv": 0.3445424263999552,
-  "cal_range_ratio": 1.462355897114429,
+  "cal_mean": 302.40478821362797,
+  "cal_std": 100.01433405448458,
+  "cal_min": 168.0,
+  "cal_max": 599.0,
+  "cal_median": 274.5,
+  "cal_cv": 0.3419029655042096,
+  "cal_range_ratio": 1.45393220288925,
   "cal_bookable_ratio": 0.5833333333333334,
-  "cal_weekend_premium": 0.10284198566473157
+  "cal_weekend_premium": 0.10124382570196677
 }
