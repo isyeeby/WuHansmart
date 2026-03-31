@@ -46,6 +46,7 @@ sql_app.db
 
 # 模型二进制（部署时在服务器放入 models/，勿提交）
 models/*.pkl
+models/**/*.pkl
 models/*.npz
 
 # 大体积日历/导入数据（勿提交）

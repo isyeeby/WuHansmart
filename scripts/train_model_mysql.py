@@ -325,8 +325,8 @@ def preprocess_after_split(
 
     train_df["area_per_bedroom"] = train_df["area"] / (train_df["bedroom_count"] + 1)
     test_df["area_per_bedroom"] = test_df["area"] / (test_df["bedroom_count"] + 1)
-    train_df["heat_score"] = train_df["favorite_count"] * train_df["rating"] / 10
-    test_df["heat_score"] = test_df["favorite_count"] * test_df["rating"] / 10
+    train_df["heat_score"] = train_df["rating"] * np.log1p(train_df["favorite_count"])
+    test_df["heat_score"] = test_df["rating"] * np.log1p(test_df["favorite_count"])
 
     train_df["is_large"] = ((train_df["bedroom_count"] >= 4) | (train_df["area"] >= 150)).astype(int)
     test_df["is_large"] = ((test_df["bedroom_count"] >= 4) | (test_df["area"] >= 150)).astype(int)
