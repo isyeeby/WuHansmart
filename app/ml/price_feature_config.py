@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import math
 from typing import Dict, List
 
 # 设施/标签关键词 -> 模型二值特征列名（与数据库 house_tags 解析一致）
@@ -33,6 +34,7 @@ FACILITY_KEYWORDS: Dict[str, str] = {
     "KTV": "karaoke",
     "卡拉OK": "karaoke",
     "有麻将机": "mahjong",
+    "大客厅": "big_living_room",
     "可做饭": "kitchen",
     "有冰箱": "fridge",
     "有烤箱": "oven",
@@ -83,3 +85,38 @@ def compute_is_budget_structural(area: float, bedroom_count: int) -> int:
     except (TypeError, ValueError):
         return 0
     return 1 if (a < 30 and b <= 1) else 0
+
+
+def log1p_area(area: float) -> float:
+    """与训练侧 np.log1p(area) 一致，供线上单条推理。"""
+    try:
+        a = max(0.0, float(area))
+    except (TypeError, ValueError):
+        return 0.0
+    return float(math.log1p(a))
+
+
+def log1p_favorite(favorite_count) -> float:
+    try:
+        c = max(0, int(favorite_count or 0))
+    except (TypeError, ValueError):
+        return 0.0
+    return float(math.log1p(c))
+
+
+def log1p_capacity(capacity) -> float:
+    try:
+        c = max(0.0, float(capacity or 0))
+    except (TypeError, ValueError):
+        return 0.0
+    return float(math.log1p(c))
+
+
+def beds_per_room(bed_count, bedroom_count) -> float:
+    """每卧室床位数，卧室数至少为 1，避免除零。"""
+    try:
+        br = max(1, int(bedroom_count or 1))
+        bc = max(1, int(bed_count or br))
+    except (TypeError, ValueError):
+        return 1.0
+    return float(bc / br)

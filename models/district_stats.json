@@ -1,79 +1,79 @@
 [
   {
     "district":"东西湖区",
-    "dist_mean":164.5384615385,
-    "dist_median":173.0,
-    "dist_std":53.2238797582,
-    "dist_count":39
+    "dist_mean":171.3513513514,
+    "dist_median":184.0,
+    "dist_std":54.5955921177,
+    "dist_count":37
   },
   {
     "district":"武昌区",
-    "dist_mean":228.8640776699,
-    "dist_median":198.0,
-    "dist_std":150.8970613479,
-    "dist_count":515
+    "dist_mean":225.8034682081,
+    "dist_median":201.0,
+    "dist_std":109.5897047429,
+    "dist_count":519
   },
   {
     "district":"汉阳区",
-    "dist_mean":198.1206896552,
-    "dist_median":167.0,
-    "dist_std":108.7265878198,
-    "dist_count":174
+    "dist_mean":197.8362573099,
+    "dist_median":171.0,
+    "dist_std":114.8115954178,
+    "dist_count":171
   },
   {
     "district":"江夏区",
-    "dist_mean":101.9603174603,
+    "dist_mean":103.6850393701,
     "dist_median":83.0,
-    "dist_std":70.4500277693,
-    "dist_count":126
+    "dist_std":72.4951778131,
+    "dist_count":127
   },
   {
     "district":"江岸区",
-    "dist_mean":193.9399141631,
+    "dist_mean":194.8311688312,
     "dist_median":163.0,
-    "dist_std":96.1273660934,
-    "dist_count":233
+    "dist_std":100.6654902999,
+    "dist_count":231
   },
   {
     "district":"江汉区",
-    "dist_mean":197.5963855422,
-    "dist_median":168.0,
-    "dist_std":99.5395428517,
-    "dist_count":332
+    "dist_mean":201.0147058824,
+    "dist_median":171.0,
+    "dist_std":98.9030532511,
+    "dist_count":340
   },
   {
     "district":"洪山区",
-    "dist_mean":204.9389671362,
+    "dist_mean":198.9290780142,
     "dist_median":161.0,
-    "dist_std":145.9454564768,
-    "dist_count":426
+    "dist_std":122.6016347156,
+    "dist_count":423
   },
   {
     "district":"硚口区",
-    "dist_mean":240.3684210526,
-    "dist_median":262.0,
-    "dist_std":125.8138883547,
-    "dist_count":19
+    "dist_mean":259.9,
+    "dist_median":266.5,
+    "dist_std":133.3293902926,
+    "dist_count":20
   },
   {
     "district":"蔡甸区",
-    "dist_mean":159.2857142857,
-    "dist_median":150.0,
-    "dist_std":54.0299740444,
-    "dist_count":7
+    "dist_mean":163.3333333333,
+    "dist_median":160.0,
+    "dist_std":58.0126423003,
+    "dist_count":6
   },
   {
     "district":"青山区",
-    "dist_mean":574.2,
-    "dist_median":330.5,
-    "dist_std":408.2422483445,
-    "dist_count":10
+    "dist_mean":532.9090909091,
+    "dist_median":294.0,
+    "dist_std":410.7917853476,
+    "dist_count":11
   },
   {
     "district":"黄陂区",
-    "dist_mean":147.8,
+    "dist_mean":149.1111111111,
     "dist_median":131.0,
-    "dist_std":58.8464102559,
-    "dist_count":85
+    "dist_std":51.9735509659,
+    "dist_count":81
   }
 ]

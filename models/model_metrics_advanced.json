@@ -1,0 +1,66 @@
+{
+  "metrics": {
+    "mae": 24.452647123879533,
+    "rmse": 101.52141153726832,
+    "r2": 0.6307133915188448,
+    "mape": 9.922180020227287
+  },
+  "train_metrics": {
+    "mae": 13.891508242121063,
+    "rmse": 35.621502778789264,
+    "r2": 0.9060385035177332,
+    "mape": 6.729954661564736
+  },
+  "cv_mean_mae_original_scale": 21.919053473242062,
+  "ensemble_size": 2,
+  "extra_engineered_features": [
+    "rating_x_log_area",
+    "guest_density",
+    "sqrt_bedroom",
+    "dist_stability",
+    "area_x_house_type_enc",
+    "log1p_cal_n_days",
+    "has_calendar"
+  ],
+  "best_params": {
+    "objective": "reg:absoluteerror",
+    "tree_method": "hist",
+    "max_depth": 4,
+    "min_child_weight": 10.0,
+    "max_delta_step": 0,
+    "subsample": 0.5339020399586051,
+    "colsample_bytree": 0.6556019198408082,
+    "colsample_bylevel": 0.7867373613244986,
+    "learning_rate": 0.04862179460544079,
+    "n_estimators": 1400,
+    "reg_alpha": 1.059795547891779,
+    "reg_lambda": 11.644751658968685,
+    "gamma": 0.2831765423823789,
+    "random_state": 42
+  },
+  "data_source": "MySQL Database (auto fallback)",
+  "feature_count": 84,
+  "sample_count_train": 1966,
+  "sample_count_test": 492,
+  "trained_at": "2026-04-01T09:58:41.216202",
+  "facility_columns_dropped_sparse": [],
+  "calendar_feature_names": [
+    "cal_n_days",
+    "cal_mean",
+    "cal_std",
+    "cal_min",
+    "cal_max",
+    "cal_median",
+    "cal_cv",
+    "cal_range_ratio",
+    "cal_bookable_ratio",
+    "cal_weekend_premium"
+  ],
+  "methodology": "Same leakage-safe preprocess as train_model_mysql; extra numeric features; stratified K-fold random search on original-scale MAE (aggregate mean or median per --cv-aggregate); test holdout never used for selection; final ensemble with inner early stopping. Default search emphasizes shallow trees + strong regularization for generalization.",
+  "training_meta": {
+    "aggressive_search": false,
+    "legacy_weights": false,
+    "cv_aggregate": "median",
+    "early_stopping_rounds": 70
+  }
+}

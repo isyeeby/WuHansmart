@@ -30,8 +30,10 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============ 配置 ============
-DATA_PATH = Path(__file__).parent.parent / 'data' / 'hive_import' / 'listings_with_tags_and_calendar.json'
-OUTPUT_DIR = Path(__file__).parent.parent / 'models'
+# 本脚本在 scripts/deprecated/ 下，仓库根为 Tujia-backend（上溯三级）
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
+DATA_PATH = _BACKEND_ROOT / "data" / "hive_import" / "listings_with_tags_and_calendar.json"
+OUTPUT_DIR = _BACKEND_ROOT / "models"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # 关键设施特征定义（基于数据分析结果）
@@ -88,7 +90,14 @@ DECORATION_STYLES = [
 def load_data():
     """加载原始JSON数据"""
     print("正在加载数据...")
-    with open(DATA_PATH, 'r', encoding='utf-8') as f:
+    if not DATA_PATH.is_file():
+        print(f"错误: 数据文件不存在:\n  {DATA_PATH}")
+        print(
+            "请将 listings_with_tags_and_calendar.json 放到上述路径，"
+            "或改用 MySQL 训练: python scripts/train_model_mysql.py"
+        )
+        sys.exit(1)
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
     houses = raw_data['houses']

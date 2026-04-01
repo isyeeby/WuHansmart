@@ -13,12 +13,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
 
-from app.ml.calendar_features import CALENDAR_FEATURE_NAMES
+from app.ml.calendar_features import CALENDAR_FEATURE_NAMES, filter_out_all_zero_price_calendar_units
 
 logger = logging.getLogger(__name__)
 
@@ -219,5 +219,12 @@ def try_load_training_frame_from_hive(
     else:
         for c in CALENDAR_FEATURE_NAMES:
             base[c] = np.nan
+
+    base, n_drop_zero_cal = filter_out_all_zero_price_calendar_units(base)
+    if n_drop_zero_cal:
+        logger.info(
+            "已剔除价格日历全日价格为 0 的房源: %d 条（Hive ODS）",
+            n_drop_zero_cal,
+        )
 
     return base, src

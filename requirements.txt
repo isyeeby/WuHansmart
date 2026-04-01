@@ -27,6 +27,7 @@ python-multipart==0.0.9
 # ML/DL
 xgboost==2.0.3
 scikit-learn==1.4.0
+optuna>=3.5.0
 jieba==0.42.1
 pandas==2.2.0
 numpy==1.26.4
@@ -35,6 +36,9 @@ numpy==1.26.4
 scrapy==2.11.1
 selenium==4.18.1
 fake-useragent==1.4.0
+
+# 日级定价训练：中国节假日/调休（可选，未装则 cal_is_holiday 等为退化口径）
+chinesecalendar>=1.9.0
 
 # Utils
 python-dotenv==1.0.1

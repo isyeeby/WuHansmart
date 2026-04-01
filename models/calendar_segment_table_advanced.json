@@ -1,0 +1,4 @@
+{
+  "version": 0,
+  "note": "当前 preprocess_after_split 仅返回 calendar_defaults，无单独段表对象"
+}

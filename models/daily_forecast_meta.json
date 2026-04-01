@@ -1,0 +1,10 @@
+{
+  "val_mae_price": 65.99490789030344,
+  "error_band_multiplier": 1.5,
+  "quantile_alphas": [
+    0.2,
+    0.5,
+    0.8
+  ],
+  "trained_with_lags": false
+}

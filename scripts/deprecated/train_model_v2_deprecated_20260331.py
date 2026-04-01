@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-专业民宿价格预测模型训练脚本
+专业民宿价格预测模型训练脚本（历史备份，与线上一致流程请用 train_model_mysql.py）
 ============================
 使用XGBoost进行回归预测，包含完整的特征工程、交叉验证、超参数调优
+
+数据源：
+  python scripts/deprecated/train_model_v2_deprecated_20260331.py --data-source mysql
+  python scripts/deprecated/train_model_v2_deprecated_20260331.py --data-source json   # 需 data/hive_import/*.json
 
 特征工程策略：
 1. 基础数值特征：rating, bedroom_count, bed_count, area, favorite_count, pic_count
@@ -13,13 +17,18 @@
 6. 聚合特征：各商圈均价、中位数等
 """
 
+import argparse
 import json
 import pandas as pd
 import numpy as np
 from pathlib import Path
 import sys
 import io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+if str(_BACKEND_ROOT := Path(__file__).resolve().parent.parent.parent) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
 
 from sklearn.model_selection import train_test_split, cross_val_score, KFold
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -30,8 +39,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ============ 配置 ============
-DATA_PATH = Path(__file__).parent.parent / 'data' / 'hive_import' / 'listings_with_tags_and_calendar.json'
-OUTPUT_DIR = Path(__file__).parent.parent / 'models'
+DATA_PATH = _BACKEND_ROOT / "data" / "hive_import" / "listings_with_tags_and_calendar.json"
+OUTPUT_DIR = _BACKEND_ROOT / "models"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # 关键设施特征定义（基于数据分析结果）
@@ -88,11 +97,73 @@ DECORATION_STYLES = [
 def load_data():
     """加载原始JSON数据"""
     print("正在加载数据...")
-    with open(DATA_PATH, 'r', encoding='utf-8') as f:
+    if not DATA_PATH.is_file():
+        print(f"错误: 数据文件不存在:\n  {DATA_PATH}")
+        print(
+            "请将 listings_with_tags_and_calendar.json 放到上述路径，"
+            "或本脚本加 --data-source mysql，或主流程: python scripts/train_model_mysql.py"
+        )
+        sys.exit(1)
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
     houses = raw_data['houses']
     print(f"加载完成: {len(houses)} 条房源数据")
+    return houses
+
+
+def load_data_mysql():
+    """从 MySQL listings 加载，字段映射为与 JSON houses 一致，供 extract_features 使用。"""
+    from app.db.database import Listing, SessionLocal
+    from app.ml.house_tags_text import parse_house_tags
+
+    print("正在从 MySQL 加载数据...")
+    db = SessionLocal()
+    try:
+        listings = (
+            db.query(Listing)
+            .filter(
+                Listing.final_price.isnot(None),
+                Listing.final_price > 0,
+                Listing.rating.isnot(None),
+                Listing.area.isnot(None),
+                Listing.district.isnot(None),
+            )
+            .all()
+        )
+    finally:
+        db.close()
+
+    houses = []
+    for l in listings:
+        dist = (l.district or "").strip()
+        if not dist:
+            continue
+        fp = float(l.final_price)
+        op = l.original_price
+        tags = parse_house_tags(l.house_tags)
+        houses.append(
+            {
+                "unit_id": l.unit_id,
+                "final_price": fp,
+                "original_price": float(op) if op is not None else fp,
+                "rating": float(l.rating or 0),
+                "comment_count": 0,
+                "favorite_count": int(l.favorite_count or 0),
+                "district": dist,
+                "latitude": float(l.latitude or 0),
+                "longitude": float(l.longitude or 0),
+                "tags": tags,
+            }
+        )
+
+    print(f"MySQL 加载完成: {len(houses)} 条房源数据")
+    if not houses:
+        print(
+            "错误: MySQL 无符合条件的数据（需 final_price>0、rating/area/district 非空）。"
+            " 或改用: python scripts/train_model_mysql.py"
+        )
+        sys.exit(1)
     return houses
 
 
@@ -379,12 +450,21 @@ def save_model(model, feature_cols, metrics, importance, df):
 
 def main():
     """主函数"""
+    parser = argparse.ArgumentParser(description="v2 历史训练脚本（产物为 price_model.joblib，非线上一致 xgboost_price_model_latest.pkl）")
+    parser.add_argument(
+        "--data-source",
+        choices=("json", "mysql"),
+        default="json",
+        help="json: data/hive_import/listings_with_tags_and_calendar.json；mysql: listings 表",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("民宿价格预测模型训练")
     print("=" * 60)
 
     # 1. 加载数据
-    houses = load_data()
+    houses = load_data_mysql() if args.data_source == "mysql" else load_data()
 
     # 2. 特征工程
     df = extract_features(houses)

@@ -39,7 +39,8 @@ def _extract_tag_texts(house_tags: Any) -> List[str]:
 
 def listing_to_prediction_request(listing: Listing) -> PredictionRequest:
     """
-    将 listings 表记录转为 PredictionRequest，并携带 unit_id 以加载日历特征。
+    将 listings 表记录转为 PredictionRequest。
+    定价推理不查 price_calendars，故不传 unit_id；日历维由服务端默认文件填充。
     标签解析为启发式设施布尔值（与训练侧 parse 口径尽力一致）。
     """
     texts = _extract_tag_texts(listing.house_tags)
@@ -51,17 +52,25 @@ def listing_to_prediction_request(listing: Listing) -> PredictionRequest:
     has_smart_lock = "智能门锁" in blob or "智能锁" in blob
     has_kitchen = "厨房" in blob or "可做饭" in blob
     near_metro = "近地铁" in blob or "地铁" in blob
+    near_station = "近火车站" in blob or "火车站" in blob
+    near_university = "近高校" in blob
+    near_ski = "近滑雪场" in blob or "滑雪场" in blob
     has_fridge = "冰箱" in blob
     has_terrace = "观景露台" in blob or "露台" in blob
     has_mahjong = "麻将" in blob
     has_elevator = "电梯" in blob
     has_parking = "停车" in blob
+    pet_friendly = "可带宠物" in blob
+    garden = any(k in blob for k in ("私家花园", "格调小院"))
+    has_big_living_room = "大客厅" in blob
     has_view = any(k in blob for k in ("江景", "湖景", "山景"))
     view_type = None
     if "江景" in blob:
         view_type = "江景"
     elif "湖景" in blob:
         view_type = "湖景"
+    elif "山景" in blob:
+        view_type = "山景"
 
     ht = (listing.house_type or "").strip()
     if "单间" in ht or "独立" in ht or "合租" in ht:
@@ -92,7 +101,7 @@ def listing_to_prediction_request(listing: Listing) -> PredictionRequest:
     return PredictionRequest(
         district=listing.district or "未知",
         trade_area=listing.trade_area or listing.district or None,
-        unit_id=listing.unit_id,
+        unit_id=None,
         room_type=room_type,
         capacity=cap,
         bedrooms=int(bd),
@@ -109,14 +118,19 @@ def listing_to_prediction_request(listing: Listing) -> PredictionRequest:
         has_tv=True,
         has_heater=False,
         near_metro=near_metro,
+        near_station=near_station,
+        near_university=near_university,
+        near_ski=near_ski,
         has_elevator=has_elevator,
         has_fridge=has_fridge,
         has_view=bool(has_view),
         view_type=view_type,
         has_terrace=has_terrace,
         has_mahjong=has_mahjong,
-        has_big_living_room=False,
+        has_big_living_room=has_big_living_room,
         has_parking=has_parking,
+        pet_friendly=pet_friendly,
+        garden=garden,
         rating=rating,
         favorite_count=fav,
         latitude=lat,

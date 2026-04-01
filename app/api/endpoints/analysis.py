@@ -12,9 +12,9 @@ from typing import Dict, List, Optional
 
 from app.models import schemas
 from app.db.database import get_db
+from app.api.endpoints.predict import _reference_price_from_models
 from app.services.listing_price_bridge import listing_to_prediction_request
 from app.services.price_opportunity_filters import is_eligible_price_opportunity_listing
-from app.services.price_predictor import model_service
 
 logger = logging.getLogger(__name__)
 
@@ -283,10 +283,10 @@ async def get_price_opportunities(
         district = listing.district
         rating = float(listing.rating or 0)
 
-        prediction_source = "xgboost"
+        prediction_source = "xgboost_daily"
         try:
             pred_req = listing_to_prediction_request(listing)
-            predicted_price = model_service.predict(pred_req)
+            predicted_price, prediction_source = _reference_price_from_models(pred_req)
         except Exception as e:
             logger.warning("price-opportunities predict failed for %s: %s", listing.unit_id, e)
             predicted_price = None

@@ -7,8 +7,6 @@ from typing import Optional
 
 import pandas as pd
 
-from app.db.database import SessionLocal
-from app.ml.calendar_features import calendar_feature_dict_for_unit
 from app.services.model_manager import model_manager
 from app.models.schemas import PredictionRequest
 
@@ -86,23 +84,30 @@ class PricePredictionModel:
         """
         try:
             # 使用 ModelManager 进行预测 - 传递完整的特征
+            rating_raw = getattr(request, "rating", None)
+            favorite_raw = getattr(request, "favorite_count", None)
             features = {
                 # 位置特征
                 'district': request.district,
                 'trade_area': getattr(request, 'trade_area', None) or request.district,
-                # 数值特征
-                'rating': getattr(request, 'rating', 4.85) or 4.85,
+                # 数值特征（None 表示未提供，由 ModelManager 结合 has_* 与 cold_start 处理）
+                'rating': float(rating_raw) if rating_raw is not None else None,
+                'has_rating_ob': 0 if rating_raw is None else 1,
                 'bedroom_count': request.bedrooms,
                 'bed_count': getattr(request, 'bed_count', request.bedrooms) or request.bedrooms,
                 'area': getattr(request, 'area', 50) or 50,
                 'capacity': request.capacity,
-                'favorite_count': getattr(request, 'favorite_count', 100) or 100,
+                'favorite_count': int(favorite_raw) if favorite_raw is not None else None,
+                'has_favorite_ob': 0 if favorite_raw is None else 1,
                 'latitude': getattr(request, 'latitude', 30.5) or 30.5,
                 'longitude': getattr(request, 'longitude', 114.3) or 114.3,
                 # 房屋类型
                 'house_type': getattr(request, 'room_type', '整套'),
+                'has_heater': bool(getattr(request, 'has_heater', False)),
                 # 设施特征 - 映射到模型特征名
                 'near_subway': 1 if getattr(request, 'near_metro', False) else 0,
+                'near_station': 1 if getattr(request, 'near_station', False) else 0,
+                'near_university': 1 if getattr(request, 'near_university', False) else 0,
                 'projector': 1 if getattr(request, 'has_projector', False) else 0,
                 'washer': 1 if getattr(request, 'has_washer', False) else 0,
                 'bathtub': 1 if getattr(request, 'has_bathtub', False) else 0,
@@ -113,16 +118,19 @@ class PricePredictionModel:
                 'terrace': 1 if getattr(request, 'has_terrace', False) else 0,
                 'elevator': 1 if getattr(request, 'has_elevator', False) else 0,
                 'mahjong': 1 if getattr(request, 'has_mahjong', False) else 0,
+                'pet_friendly': 1 if getattr(request, 'pet_friendly', False) else 0,
+                'has_view': 1 if getattr(request, 'has_view', False) else 0,
+                'view_type': getattr(request, 'view_type', None),
                 # 景观特征
                 'river_view': 1 if (getattr(request, 'has_view', False) and '江景' in str(getattr(request, 'view_type', ''))) else 0,
                 'lake_view': 1 if (getattr(request, 'has_view', False) and '湖景' in str(getattr(request, 'view_type', ''))) else 0,
-                # 其他特征 (前端未提供时默认为0)
-                'near_station': 0,
-                'near_university': 0,
-                'near_ski': 0,
-                'mountain_view': 0,
+                # 其他特征
+                'near_ski': 1 if getattr(request, 'near_ski', False) else 0,
+                'mountain_view': 1
+                if (getattr(request, 'has_view', False) and '山景' in str(getattr(request, 'view_type', '')))
+                else 0,
                 'sunroom': 0,
-                'garden': 0,
+                'garden': 1 if getattr(request, 'garden', False) else 0,
                 'city_view': 0,
                 'big_projector': 1 if getattr(request, 'has_projector', False) else 0,  # 有投影则可能有巨幕投影
                 'view_bathtub': 0,
@@ -130,8 +138,6 @@ class PricePredictionModel:
                 'oven': 0,
                 'dry_wet_sep': 0,
                 'smart_toilet': 0,
-                'hot_water': 1,  # 默认有热水
-                'pet_friendly': 0,
                 'free_parking': 1 if getattr(request, 'has_parking', False) else 0,
                 'paid_parking': 0,
                 'free_water': 0,
@@ -149,15 +155,8 @@ class PricePredictionModel:
                 'business': 0,
             }
 
-            uid = getattr(request, "unit_id", None)
-            if uid:
-                db = SessionLocal()
-                try:
-                    cal_feats = calendar_feature_dict_for_unit(db, str(uid))
-                    features.update(cal_feats)
-                finally:
-                    db.close()
-
+            # 定价推理不查 price_calendars：日历维由 ModelManager 用 calendar_feature_defaults.json 填充，
+            # 与训练主评估口径一致，避免依赖 unit_id 拉库「作弊」。
             prediction = self.manager.predict_price(features)
             if prediction is not None:
                 return prediction

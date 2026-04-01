@@ -383,7 +383,7 @@ class PredictionRequest(BaseModel):
     trade_area: Optional[str] = None  # 商圈（更精细的位置）
     unit_id: Optional[str] = Field(
         default=None,
-        description="若提供，则从 price_calendars 聚合日历特征参与定价（与训练一致）",
+        description="可选业务字段；XGBoost 定价不读库，不因 unit_id 拉取 price_calendars。",
     )
     room_type: str
     capacity: int = Field(..., ge=1, le=20, description="可住人数")
@@ -401,10 +401,15 @@ class PredictionRequest(BaseModel):
     has_tv: bool = False
     has_heater: bool = False
     near_metro: bool = False
+    near_station: bool = False
+    near_university: bool = False
+    near_ski: bool = False  # 近滑雪场（与设施关键词「近滑雪场」对齐）
+    pet_friendly: bool = False
     has_elevator: bool = False
     has_fridge: bool = False
     has_view: bool = False  # 江景/湖景（景观房）
     view_type: Optional[str] = None  # 景观类型: 江景/湖景/山景
+    garden: bool = False  # 私家花园/格调小院（与关键词对齐，独立于江/湖/山景）
     has_terrace: bool = False  # 观景露台
     has_mahjong: bool = False  # 麻将机
     has_big_living_room: bool = False  # 大客厅
@@ -423,6 +428,10 @@ class PredictionResponse(BaseModel):
     features_used: dict
     district_avg: Optional[float]
     suggestion: Optional[str]
+    prediction_model: Optional[str] = Field(
+        default=None,
+        description="xgboost_daily=日级锚定日基准价；xgboost_listing=房源级单点（日级不可用时的回退）",
+    )
 
 class UserBase(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)

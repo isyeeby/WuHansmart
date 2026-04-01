@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-价格日历聚合特征（训练与线上一致）。
+价格日历聚合特征（离线训练 / 批量造表用）。
 
 从 price_calendars 表按 unit_id 聚合，刻画动态定价水平、波动与周末溢价等，
-与 listings.final_price 互补：前者反映日历上的价格分布，后者多为挂牌展示价。
+与 listings.final_price 互补。定价 HTTP 接口不查库；线上日历维由
+calendar_feature_defaults.json 填充，与训练主评估口径一致。
 """
 from __future__ import annotations
 
@@ -99,6 +100,24 @@ def aggregate_calendar_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return base[["unit_id"] + CALENDAR_FEATURE_NAMES]
 
 
+def filter_out_all_zero_price_calendar_units(df: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+    """
+    剔除「有日历行但所有日价格均为 0（或非正）」的房源，避免 cal_n_days>0 却无有效价污染训练。
+
+    条件：cal_n_days > 0 且 cal_max 有效且 cal_max <= 0。
+    无日历（cal_n_days 为 0/NaN）或未合并日历列的样本保留不动。
+    """
+    if df.empty or "cal_n_days" not in df.columns or "cal_max" not in df.columns:
+        return df, 0
+    nd = pd.to_numeric(df["cal_n_days"], errors="coerce").fillna(0)
+    cm = pd.to_numeric(df["cal_max"], errors="coerce")
+    bad = (nd > 0) & cm.notna() & (cm <= 0)
+    n = int(bad.sum())
+    if n == 0:
+        return df, 0
+    return df.loc[~bad].reset_index(drop=True), n
+
+
 def aggregate_calendar_by_units_from_rows(
     rows: List[PriceCalendar],
 ) -> pd.DataFrame:
@@ -130,7 +149,10 @@ def load_calendar_aggregates_for_unit_ids(
 def calendar_feature_dict_for_unit(
     db: Session, unit_id: str
 ) -> Dict[str, float]:
-    """单房源推理：从数据库拉日历并返回特征字典（键与 CALENDAR_FEATURE_NAMES 一致）。"""
+    """
+    从数据库拉单套日历并返回特征字典（键与 CALENDAR_FEATURE_NAMES 一致）。
+    仅供离线脚本或分析使用；XGBoost 定价 API 路径不应调用。
+    """
     rows = db.query(PriceCalendar).filter(PriceCalendar.unit_id == unit_id).all()
     agg = aggregate_calendar_by_units_from_rows(rows)
     if agg.empty:

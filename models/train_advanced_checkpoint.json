@@ -1,0 +1,23 @@
+{
+  "seed": 42,
+  "cv": 3,
+  "early_stopping_rounds": 70,
+  "best_mae": 40.14394284086891,
+  "best_params": {
+    "objective": "reg:absoluteerror",
+    "tree_method": "hist",
+    "max_depth": 4,
+    "min_child_weight": 6.0,
+    "subsample": 0.6679260639051012,
+    "colsample_bytree": 0.7140980167764892,
+    "colsample_bylevel": 0.7877954579334581,
+    "learning_rate": 0.031283841906515196,
+    "n_estimators": 2600,
+    "reg_alpha": 0.5953297285060185,
+    "reg_lambda": 3.1309510136970524,
+    "gamma": 0.10825056701460234,
+    "random_state": 42
+  },
+  "random_trials_done": 17,
+  "updated_at": "2026-04-01T02:05:45.043966"
+}

@@ -47,7 +47,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUTPUT_DIR = Path(__file__).parent.parent / "models"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-from app.ml.calendar_features import aggregate_calendar_dataframe
+from app.ml.calendar_features import (
+    aggregate_calendar_dataframe,
+    filter_out_all_zero_price_calendar_units,
+)
 from app.ml.price_feature_config import FACILITY_KEYWORDS, ordered_facility_columns
 from app.ml.house_tags_text import parse_house_tags
 from scripts.train_model_mysql import (
@@ -173,6 +176,9 @@ def load_data_from_json() -> pd.DataFrame:
     df = pd.DataFrame(records)
     df = df[df["unit_id"].astype(str).str.len() > 0].copy()
     df = df.merge(cal_agg, on="unit_id", how="left")
+    df, n_az = filter_out_all_zero_price_calendar_units(df)
+    if n_az:
+        print(f"已剔除价格日历全日为 0 的房源: {n_az} 条")
 
     df = df[(df["price"] >= 50) & (df["price"] <= 5000)].copy()
     df = df[df["rating"].notna() & df["district"].notna()].copy()
@@ -521,7 +527,7 @@ def main():
     train_df, test_df = stratified_holdout(df)
     print(f"\n划分完成: 训练 {len(train_df)} / 测试 {len(test_df)}")
 
-    train_df, test_df, _enc, _dst, feature_cols, _cal_def = preprocess_after_split(
+    train_df, test_df, _enc, _dst, feature_cols, _cal_def, _ta_stats = preprocess_after_split(
         train_df, test_df
     )
     if len(train_df) < 50 or len(test_df) < 10:
