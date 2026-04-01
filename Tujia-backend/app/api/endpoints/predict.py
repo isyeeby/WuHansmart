@@ -4,7 +4,7 @@ Price prediction endpoints using XGBoost model.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from datetime import datetime, timedelta
 from app.models.schemas import PredictionRequest, PredictionResponse
 from app.services.price_predictor import model_service
@@ -186,6 +186,37 @@ def _get_feature_display_name(feature: str) -> str:
     return f"模型特征（{feature}）"
 
 
+def _anchor_price_for_sensitivity(req: PredictionRequest, use_daily: bool) -> float:
+    """
+    与因子分解配套：若主路径已选用日级，则反事实预测也优先日级，保持同一口径。
+    仅在日级无输出时回退房源级单点（极少见）。
+    """
+    from app.services.daily_price_service import daily_forecast_service
+
+    if use_daily and daily_forecast_service.available():
+        daily_out = daily_forecast_service.predict_forecast_14(req, n_days=14)
+        if daily_out is not None and daily_out.get("base_price") is not None:
+            return float(daily_out["base_price"])
+        logger.debug("日级预测无 base_price，反事实回退房源级单点")
+    return float(model_service.predict(req))
+
+
+def _reference_price_from_models(req: PredictionRequest) -> Tuple[float, str]:
+    """
+    智能定价统一口径：优先日级 XGBoost 锚定日「模型基准价」，否则房源级单点预测。
+
+    Returns:
+        (price, source)，source 为 ``xgboost_daily`` 或 ``xgboost_listing``。
+    """
+    from app.services.daily_price_service import daily_forecast_service
+
+    if daily_forecast_service.available():
+        daily_out = daily_forecast_service.predict_forecast_14(req, n_days=14)
+        if daily_out is not None and daily_out.get("base_price") is not None:
+            return float(daily_out["base_price"]), "xgboost_daily"
+    return float(model_service.predict(req)), "xgboost_listing"
+
+
 def _calculate_confidence(predicted_price: float, district_avg: float, sample_count: int = 100) -> float:
     """
     计算预测置信度
@@ -282,11 +313,14 @@ def _calculate_similarity(target: dict, competitor: dict) -> float:
 @router.post("/reload-model")
 def reload_model():
     """
-    重新加载模型（热重载）
+    重新加载模型（热重载）：房源级 pkl + 日级 pkl/编码器均从磁盘重读。
     """
     try:
+        from app.services.daily_price_service import daily_forecast_service
+
         model_service.manager.reload_models()
-        return {"status": "success", "message": "Models reloaded successfully"}
+        daily_forecast_service.reload_from_disk()
+        return {"status": "success", "message": "房源级与日级模型已从磁盘重新加载"}
     except Exception as e:
         logger.error(f"Failed to reload models: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to reload models: {str(e)}")
@@ -299,9 +333,7 @@ def reload_model():
 @router.post("/price")
 def predict_listing_price(request: dict):
     """
-    价格预测
-
-    输入房源特征，预测合理价格区间
+    价格预测：优先日级锚定日基准价，否则房源级单点；返回区间与简要因子说明。
     """
     try:
         # 从请求中提取特征
@@ -361,6 +393,9 @@ def predict_listing_price(request: dict):
             has_tv=has_tv,
             has_heater=has_heater,
             near_metro=near_metro or has_metro,
+            near_station=request.get("near_station", False),
+            near_university=request.get("near_university", False),
+            near_ski=request.get("near_ski", False),
             has_elevator=has_elevator,
             has_fridge=has_fridge,
             has_view=has_view or river_view or lake_view or mountain_view,
@@ -369,11 +404,19 @@ def predict_listing_price(request: dict):
             has_mahjong=has_mahjong,
             has_big_living_room=has_big_living_room,
             has_parking=has_parking,
+            pet_friendly=pet_friendly,
+            garden=garden,
         )
 
-        # 使用模型预测价格（模型已经考虑了所有设施因素）
-        predicted_price = model_service.predict(pred_request)
-        logger.info(f"预测结果 - district: {district}, area: {area}, bedroom_count: {bedroom_count}, predicted_price: {predicted_price}")
+        predicted_price, pred_src = _reference_price_from_models(pred_request)
+        logger.info(
+            "预测结果 - district: %s, area: %s, bedroom_count: %s, predicted_price: %s, model: %s",
+            district,
+            area,
+            bedroom_count,
+            predicted_price,
+            pred_src,
+        )
 
         # 计算价格区间
         lower = round(predicted_price * 0.88, 2)
@@ -429,6 +472,7 @@ def predict_listing_price(request: dict):
 
         return {
             "predicted_price": round(predicted_price, 2),
+            "prediction_model": pred_src,
             "price_range": {
                 "lower": lower,
                 "upper": upper
@@ -533,11 +577,10 @@ def get_competitors_analysis(
 @router.post("/", response_model=PredictionResponse)
 def predict_price(request: PredictionRequest):
     """
-    Predict the price of a homestay listing based on its features.
-    Uses the XGBoost model trained on Hive data.
+    单点定价预测：优先日级 XGBoost 锚定日基准价，不可用时回退房源级单点。
     """
     try:
-        predicted_price = model_service.predict(request)
+        predicted_price, pred_src = _reference_price_from_models(request)
 
         # Calculate confidence interval (e.g., +/- 15%)
         lower_bound = round(predicted_price * 0.85, 2)
@@ -554,7 +597,8 @@ def predict_price(request: PredictionRequest):
             confidence_interval=[lower_bound, upper_bound],
             features_used=request.model_dump(),
             district_avg=district_avg,
-            suggestion=suggestion
+            suggestion=suggestion,
+            prediction_model=pred_src,
         )
     except Exception as e:
         logger.error(f"Error predicting price: {e}")
@@ -569,11 +613,13 @@ def quick_predict(
     bedrooms: int = Query(..., ge=0, description="卧室数"),
     has_wifi: bool = Query(True, description="是否有WiFi"),
     is_weekend: bool = Query(False, description="是否周末"),
-    unit_id: Optional[str] = Query(None, description="平台房源ID，用于加载价格日历特征"),
+    unit_id: Optional[str] = Query(
+        None, description="可选；定价不读库，不因 unit_id 拉取 price_calendars"
+    ),
 ):
     """
     Quick price prediction using query parameters (GET method).
-    Simplified version for quick estimates.
+    优先日级锚定日基准价，否则房源级单点。
     """
     request = PredictionRequest(
         district=district,
@@ -589,9 +635,10 @@ def quick_predict(
     )
 
     try:
-        predicted_price = model_service.predict(request)
+        predicted_price, pred_src = _reference_price_from_models(request)
         return {
             "predicted_price": predicted_price,
+            "prediction_model": pred_src,
             "district": district,
             "currency": "CNY"
         }
@@ -673,15 +720,16 @@ def _generate_suggestion(predicted_price: float,
 @router.post("/batch")
 def batch_predict(requests: List[PredictionRequest]):
     """
-    Batch price prediction for multiple listings.
+    批量定价预测：每条优先日级锚定日基准价，否则房源级单点。
     """
     results = []
     for request in requests:
         try:
-            price = model_service.predict(request)
+            price, pred_src = _reference_price_from_models(request)
             results.append({
                 "district": request.district,
                 "predicted_price": price,
+                "prediction_model": pred_src,
                 "status": "success"
             })
         except Exception as e:
@@ -720,47 +768,74 @@ def price_forecast(
     has_elevator: bool = Query(False, description="电梯"),
     has_fridge: bool = Query(False, description="冰箱"),
     has_view: bool = Query(False, description="景观房"),
+    view_type: Optional[str] = Query(None, description="景观类型，如 江景/湖景/山景，可多选逗号拼接"),
     has_terrace: bool = Query(False, description="观景露台"),
     has_mahjong: bool = Query(False, description="麻将机"),
     has_big_living_room: bool = Query(False, description="大客厅"),
+    pet_friendly: bool = Query(False, description="可带宠物"),
+    has_parking: bool = Query(False, description="停车位/免费停车"),
+    near_station: bool = Query(False, description="近火车站"),
+    near_university: bool = Query(False, description="近高校"),
+    near_ski: bool = Query(False, description="近滑雪场"),
+    garden: bool = Query(False, description="私家花园/小院"),
     base_price: Optional[float] = Query(None, description="当前定价（可选）"),
-    unit_id: Optional[str] = Query(None, description="平台房源ID，用于 XGBoost 基准价（价格日历特征）"),
+    unit_id: Optional[str] = Query(None, description="平台房源ID；日级模型路径下仍不读 price_calendars"),
+    use_daily_xgb: bool = Query(
+        True,
+        description="默认 true：日级 XGBoost 逐日预测+区间；为 false 时用房源级基准价+规则因子曲线",
+    ),
 ):
     """
     14天价格预测
 
-    基于周末/节假日因素和市场供需规律，预测未来14天的建议价格
+    默认优先日级 XGBoost（需已部署 xgboost_price_daily_model.pkl）；失败或未传日级时回退房源级+规则因子。
     """
     try:
-        # 基础价格
+        base_request = PredictionRequest(
+            district=district,
+            trade_area=trade_area or district,
+            room_type=room_type,
+            capacity=capacity,
+            bedrooms=bedrooms,
+            bed_count=bed_count,
+            bathrooms=1,
+            area=area,
+            has_wifi=has_wifi,
+            has_air_conditioning=has_air_conditioning,
+            has_kitchen=has_kitchen,
+            has_projector=has_projector,
+            has_bathtub=has_bathtub,
+            has_washer=has_washer,
+            has_smart_lock=has_smart_lock,
+            has_tv=has_tv,
+            has_heater=has_heater,
+            near_metro=near_metro,
+            has_elevator=has_elevator,
+            has_fridge=has_fridge,
+            has_view=has_view,
+            view_type=view_type,
+            has_terrace=has_terrace,
+            has_mahjong=has_mahjong,
+            has_big_living_room=has_big_living_room,
+            pet_friendly=pet_friendly,
+            has_parking=has_parking,
+            near_station=near_station,
+            near_university=near_university,
+            near_ski=near_ski,
+            garden=garden,
+            unit_id=unit_id,
+        )
+        if use_daily_xgb:
+            from app.services.daily_price_service import daily_forecast_service
+
+            if daily_forecast_service.available():
+                daily_out = daily_forecast_service.predict_forecast_14(base_request, n_days=14)
+                if daily_out is not None:
+                    return daily_out
+            logger.info("日级 XGB 不可用或预测失败，回退规则因子 forecast")
+
+        # 基础价格（房源级模型）
         if base_price is None:
-            base_request = PredictionRequest(
-                district=district,
-                trade_area=trade_area or district,
-                room_type=room_type,
-                capacity=capacity,
-                bedrooms=bedrooms,
-                bed_count=bed_count,
-                bathrooms=1,
-                area=area,
-                has_wifi=has_wifi,
-                has_air_conditioning=has_air_conditioning,
-                has_kitchen=has_kitchen,
-                has_projector=has_projector,
-                has_bathtub=has_bathtub,
-                has_washer=has_washer,
-                has_smart_lock=has_smart_lock,
-                has_tv=has_tv,
-                has_heater=has_heater,
-                near_metro=near_metro,
-                has_elevator=has_elevator,
-                has_fridge=has_fridge,
-                has_view=has_view,
-                has_terrace=has_terrace,
-                has_mahjong=has_mahjong,
-                has_big_living_room=has_big_living_room,
-                unit_id=unit_id,
-            )
             base_price = model_service.predict(base_request)
 
         forecasts = []
@@ -897,10 +972,11 @@ def factor_decomposition(request: dict):
     对用户提交的房源特征，逐项「关闭 / 降级」并重新预测，
     测量每项特征被移除后价格的变化量（即该项对最终定价的边际贡献）。
     设施逐项独立展示，不合并，不保留残差项。
-    同时返回模型全局特征重要性，供交叉参考。
+    优先使用日级 XGBoost 锚定日基准价驱动敏感度与全局重要性；不可用时回退房源级模型。
     """
     try:
         from app.models.schemas import PredictionRequest
+        from app.services.daily_price_service import daily_forecast_service
 
         def build_request(**overrides):
             base = {
@@ -922,6 +998,9 @@ def factor_decomposition(request: dict):
                 'has_tv': request.get('has_tv', False),
                 'has_heater': request.get('has_heater', False),
                 'near_metro': request.get('near_metro', False),
+                'near_station': request.get('near_station', False),
+                'near_university': request.get('near_university', False),
+                'near_ski': request.get('near_ski', False),
                 'has_elevator': request.get('has_elevator', False),
                 'has_fridge': request.get('has_fridge', False),
                 'has_view': request.get('has_view', False),
@@ -930,17 +1009,20 @@ def factor_decomposition(request: dict):
                 'has_mahjong': request.get('has_mahjong', False),
                 'has_big_living_room': request.get('has_big_living_room', False),
                 'has_parking': request.get('has_parking', False),
+                'pet_friendly': request.get('pet_friendly', False),
+                'garden': request.get('garden', False),
             }
             base.update(overrides)
             return PredictionRequest(**base)
 
-        current_price = model_service.predict(build_request())
+        current_price, ref_src = _reference_price_from_models(build_request())
+        use_daily = ref_src == "xgboost_daily"
         district_avg = _get_district_average(request.get('district', '武昌区')) or 200
 
         factors = []
 
         def _add(label: str, value_desc: str, counterfactual_desc: str, **overrides):
-            cf_price = model_service.predict(build_request(**overrides))
+            cf_price = _anchor_price_for_sensitivity(build_request(**overrides), use_daily)
             delta = round(current_price - cf_price, 1)
             if abs(delta) < 0.5:
                 return
@@ -975,9 +1057,12 @@ def factor_decomposition(request: dict):
             ('has_bathtub', '浴缸'), ('has_washer', '洗衣机'),
             ('has_smart_lock', '智能锁'), ('has_tv', '电视'),
             ('has_heater', '暖气'), ('near_metro', '近地铁'),
+            ('near_station', '近火车站'), ('near_university', '近高校'),
+            ('near_ski', '近滑雪场'),
             ('has_elevator', '电梯'), ('has_fridge', '冰箱'),
             ('has_terrace', '露台'), ('has_mahjong', '麻将机'),
-            ('has_parking', '停车位'),
+            ('has_parking', '停车位'), ('pet_friendly', '可带宠物'),
+            ('has_big_living_room', '大客厅'), ('garden', '私家花园'),
         ]
         for attr, label in facility_items:
             if request.get(attr, False):
@@ -991,43 +1076,72 @@ def factor_decomposition(request: dict):
         # 按绝对影响排序
         factors.sort(key=lambda f: abs(f["delta"]), reverse=True)
 
-        # 全局特征重要性（与 /feature-importance 相同逻辑）
-        raw_importance = model_service.get_feature_importance()
+        # 全局特征重要性：与日级/房源级基准价来源一致，不混用两套模型的重要性
         global_importance = []
+        if ref_src == "xgboost_daily":
+            raw_importance = daily_forecast_service.get_feature_importance_gain()
+        else:
+            raw_importance = model_service.get_feature_importance()
         if raw_importance:
             total = sum(raw_importance.values())
-            for feat, score in sorted(raw_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
-                display_name = _get_feature_display_name(feat)
-                global_importance.append({
-                    "feature": feat,
-                    "display_name": display_name if display_name != feat else feat,
-                    "importance": round(score / total * 100, 1),
-                })
+            if total > 0:
+                for feat, score in sorted(raw_importance.items(), key=lambda x: x[1], reverse=True)[:10]:
+                    display_name = _get_feature_display_name(feat)
+                    global_importance.append({
+                        "feature": feat,
+                        "display_name": display_name if display_name != feat else feat,
+                        "importance": round(score / total * 100, 1),
+                    })
 
-        # 模型元数据（训练指标）
-        meta = model_service.manager.price_model_meta or {}
-        test_metrics = meta.get("metrics", {})
-
-        return {
-            "predicted_price": round(current_price, 2),
-            "district_avg_price": round(district_avg, 2),
-            "factors": factors,
-            "global_importance": global_importance,
-            "model_info": {
+        # 模型元数据
+        if ref_src == "xgboost_daily":
+            dm = daily_forecast_service.get_meta()
+            vmae = dm.get("val_mae_price")
+            model_info = {
+                "r2": None,
+                "mae": round(float(vmae), 2) if vmae is not None else None,
+                "mape": None,
+                "sample_count": None,
+                "feature_count": None,
+                "trained_at": None,
+            }
+        else:
+            meta = model_service.manager.price_model_meta or {}
+            test_metrics = meta.get("metrics", {})
+            model_info = {
                 "r2": test_metrics.get("r2"),
                 "mae": test_metrics.get("mae"),
                 "mape": test_metrics.get("mape"),
                 "sample_count": meta.get("sample_count_total"),
                 "feature_count": meta.get("feature_count"),
                 "trained_at": meta.get("trained_at"),
-            },
-            "methodology": {
+            }
+
+        if ref_src == "xgboost_daily":
+            methodology = {
+                "name": "逐项敏感度分析（日级 XGBoost · 锚定日基准价）",
+                "description": (
+                    "基于日级定价模型对「今日起第 1 天」的模型基准价：保持其他特征不变，将目标特征恢复为市场常见基线后重算基准价，"
+                    "得到各因素对锚定日建议价的边际贡献；与顶部价格日历同源。"
+                ),
+            }
+        else:
+            methodology = {
                 "name": "逐项敏感度分析 (Leave-One-Out Sensitivity)",
                 "description": (
-                    "保持其他特征不变，将目标特征恢复为市场常见基线（如面积→50㎡、设施→关闭），"
+                    "日级模型不可用，已改用房源级单点模型。保持其他特征不变，将目标特征恢复为市场常见基线，"
                     "测量预测价格的变化量，即该特征对您这套房源定价的边际贡献。"
                 ),
-            },
+            }
+
+        return {
+            "predicted_price": round(current_price, 2),
+            "district_avg_price": round(district_avg, 2),
+            "reference_model": ref_src,
+            "factors": factors,
+            "global_importance": global_importance,
+            "model_info": model_info,
+            "methodology": methodology,
         }
 
     except Exception as e:
@@ -1042,10 +1156,30 @@ def factor_decomposition(request: dict):
 @router.get("/feature-importance")
 def get_feature_importance():
     """
-    获取价格预测模型的特征重要性
-    
-    了解哪些因素对价格影响最大
+    特征重要性：优先日级 XGBoost 的 Gain；日级不可用时用房源级模型。
     """
+    from app.services.daily_price_service import daily_forecast_service
+
+    daily_imp = daily_forecast_service.get_feature_importance_gain() if daily_forecast_service.available() else None
+    if daily_imp:
+        total_importance = sum(daily_imp.values())
+        if total_importance > 0:
+            formatted_features = []
+            for feature, score in sorted(daily_imp.items(), key=lambda x: x[1], reverse=True):
+                formatted_features.append({
+                    "feature": feature,
+                    "display_name": _get_feature_display_name(feature),
+                    "importance": round(score / total_importance, 4),
+                    "raw_score": round(score, 2)
+                })
+            return {
+                "source": "xgboost_daily",
+                "is_model_derived": True,
+                "features": formatted_features[:10],
+                "total_features": len(daily_imp),
+                "note": "日级定价模型的 Gain 重要性，与智能定价锚定日预测同源",
+            }
+
     importance = model_service.get_feature_importance()
 
     if importance is None:
@@ -1077,10 +1211,11 @@ def get_feature_importance():
         })
 
     return {
-        "source": "xgboost_model",
+        "source": "xgboost_listing",
         "is_model_derived": True,
         "features": formatted_features[:10],  # 前10个重要特征
-        "total_features": len(importance)
+        "total_features": len(importance),
+        "note": "日级模型不可用，展示房源级模型的特征重要性",
     }
 
 
@@ -1095,7 +1230,7 @@ def competitiveness_assessment(request: dict):
 
     核心逻辑：
     1. 用户提交房源特征和当前定价
-    2. 模型预测该房源的"合理价格"
+    2. 优先用日级模型锚定日「模型基准价」作为合理价；不可用时用房源级单点
     3. 对比用户定价与合理价格，评估定价竞争力
 
     竞争力定义：
@@ -1137,6 +1272,9 @@ def competitiveness_assessment(request: dict):
             has_tv=request.get('has_tv', False),
             has_heater=request.get('has_heater', False),
             near_metro=request.get('near_metro', False),
+            near_station=request.get('near_station', False),
+            near_university=request.get('near_university', False),
+            near_ski=request.get('near_ski', False),
             has_elevator=request.get('has_elevator', False),
             has_fridge=request.get('has_fridge', False),
             has_view=request.get('has_view', False),
@@ -1145,10 +1283,12 @@ def competitiveness_assessment(request: dict):
             has_mahjong=request.get('has_mahjong', False),
             has_big_living_room=request.get('has_big_living_room', False),
             has_parking=request.get('has_parking', False),
+            pet_friendly=request.get('pet_friendly', False),
+            garden=request.get('garden', False),
         )
 
-        # 模型预测的合理价格
-        predicted_price = model_service.predict(pred_request)
+        # 合理价格：与日级日历「模型基准价」同源
+        predicted_price, fair_src = _reference_price_from_models(pred_request)
 
         # 获取商圈均价作为参考
         district_avg = _get_district_average(request.get('district', '武昌区')) or 200
@@ -1274,6 +1414,7 @@ def competitiveness_assessment(request: dict):
             "pricing_analysis": {
                 "user_price": round(user_price, 2),
                 "fair_price": round(predicted_price, 2),
+                "fair_price_model": fair_src,
                 "price_ratio": round(price_ratio, 2),
                 "price_difference": round(user_price - predicted_price, 2),
                 "evaluation": price_comment,

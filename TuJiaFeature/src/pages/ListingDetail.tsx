@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Card, Row, Col, Tag, Button, Spin, Empty, message, Image, Rate, Divider, Collapse, Tabs, Typography } from 'antd';
-import { HeartOutlined, HeartFilled, EnvironmentOutlined, HomeOutlined, StarOutlined, ArrowLeftOutlined, CalendarOutlined, DownOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { HeartOutlined, HeartFilled, EnvironmentOutlined, HomeOutlined, StarOutlined, ArrowLeftOutlined, CalendarOutlined, DownOutlined } from '@ant-design/icons';
 import { motion } from 'motion/react';
 import { PageHeader } from '../components/common';
 
@@ -236,11 +236,6 @@ const ListingDetail: React.FC = () => {
       >
         查看价格日历
       </Button>
-      <Link to="/prediction">
-        <Button type="text" icon={<ThunderboltOutlined />} className="!text-[var(--ink-black)] hover:!bg-[rgba(26,26,26,0.06)] !h-10">
-          智能定价
-        </Button>
-      </Link>
       <Button
         size="large"
         icon={isFavorite ? <HeartFilled className="text-[var(--ochre)]" /> : <HeartOutlined />}

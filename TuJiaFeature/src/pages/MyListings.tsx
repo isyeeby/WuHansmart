@@ -683,7 +683,8 @@ const MyListings: React.FC = () => {
 
           <Form.Item 
             name="facility_tags" 
-            label={<span className="text-[#4a4a4a] font-medium">设施标签</span>}
+            label={<span className="text-[#4a4a4a] font-medium">设施标签（与智能定价一致）</span>}
+            tooltip="选项与定价工作台识别口径一致，保存后在「智能定价」选本房源可自动勾选对应项"
           >
             <Select 
               mode="multiple" 
@@ -708,7 +709,8 @@ const MyListings: React.FC = () => {
 
           <Form.Item 
             name="location_tags" 
-            label={<span className="text-[#4a4a4a] font-medium">位置标签</span>}
+            label={<span className="text-[#4a4a4a] font-medium">位置与环境（与智能定价一致）</span>}
+            tooltip="含近地铁、景观等；选「江景/江景房」等均会映射到定价页景观勾选"
           >
             <Select 
               mode="multiple" 
@@ -725,6 +727,57 @@ const MyListings: React.FC = () => {
               )}
             >
               {locationTags.map((tag: any) => {
+                const tagValue = typeof tag === 'string' ? tag : tag.text || tag.tagText || String(tag);
+                return <Option key={tagValue} value={tagValue}>{tagValue}</Option>;
+              })}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="style_tags"
+            label={<span className="text-[#4a4a4a] font-medium">风格标签</span>}
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择风格"
+              className="!min-h-11"
+              tagRender={(props) => (
+                <Tag
+                  className="!bg-[#f5f2ed] !border-[#ebe7e0] !text-[#6b6b6b] !rounded-sm"
+                  closable={props.closable}
+                  onClose={props.onClose}
+                >
+                  {props.label}
+                </Tag>
+              )}
+            >
+              {styleTags.map((tag: any) => {
+                const tagValue = typeof tag === 'string' ? tag : tag.text || tag.tagText || String(tag);
+                return <Option key={tagValue} value={tagValue}>{tagValue}</Option>;
+              })}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="crowd_tags"
+            label={<span className="text-[#4a4a4a] font-medium">服务 / 人群（与智能定价一致）</span>}
+            tooltip="如可带宠物、亲子精选等，会映射到定价页「可带宠物」等选项"
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择服务或人群"
+              className="!min-h-11"
+              tagRender={(props) => (
+                <Tag
+                  className="!bg-[#f5f2ed] !border-[#ebe7e0] !text-[#6b6b6b] !rounded-sm"
+                  closable={props.closable}
+                  onClose={props.onClose}
+                >
+                  {props.label}
+                </Tag>
+              )}
+            >
+              {serviceTags.map((tag: any) => {
                 const tagValue = typeof tag === 'string' ? tag : tag.text || tag.tagText || String(tag);
                 return <Option key={tagValue} value={tagValue}>{tagValue}</Option>;
               })}
@@ -990,7 +1043,8 @@ const MyListings: React.FC = () => {
 
           <Form.Item
             name="facility_tags"
-            label={<span className="text-[#4a4a4a] font-medium">设施标签</span>}
+            label={<span className="text-[#4a4a4a] font-medium">设施标签（与智能定价一致）</span>}
+            tooltip="与定价工作台勾选口径一致"
           >
             <Select
               mode="multiple"
@@ -1015,7 +1069,8 @@ const MyListings: React.FC = () => {
 
           <Form.Item
             name="location_tags"
-            label={<span className="text-[#4a4a4a] font-medium">位置标签</span>}
+            label={<span className="text-[#4a4a4a] font-medium">位置与环境（与智能定价一致）</span>}
+            tooltip="含近地铁、江景/江景房等，会映射到定价页"
           >
             <Select
               mode="multiple"
@@ -1040,7 +1095,8 @@ const MyListings: React.FC = () => {
 
           <Form.Item
             name="crowd_tags"
-            label={<span className="text-[#4a4a4a] font-medium">人群标签</span>}
+            label={<span className="text-[#4a4a4a] font-medium">服务 / 人群（与智能定价一致）</span>}
+            tooltip="如可带宠物、亲子精选等"
           >
             <Select
               mode="multiple"
@@ -1272,6 +1328,15 @@ const MyListings: React.FC = () => {
         className="!rounded-sm"
       >
         <Divider className="!my-4 !border-[#f5f2ed]" />
+        <p className="mb-3 text-xs leading-relaxed text-[#999]">
+          参考价与「智能定价」中的<strong className="text-[#6b6b6b]">模型基准价</strong>
+          一致（日级 XGBoost 对锚定日的建议价）；不可用则回退房源级模型或行政区样本均价。查看未来 14
+          天逐日价格与趋势请前往
+          <Link to="/prediction" className="mx-0.5 text-[#c45c3e] underline-offset-2 hover:underline">
+            智能定价
+          </Link>
+          。具体依据见下方说明。
+        </p>
         <Spin spinning={analysisLoading} size="large">
           {priceSuggestion && selectedListing && (
             <motion.div 

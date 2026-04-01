@@ -145,6 +145,9 @@ export type PredictionAnalysisParams = {
   has_tv?: boolean;
   has_heater?: boolean;
   near_metro?: boolean;
+  near_station?: boolean;
+  near_university?: boolean;
+  near_ski?: boolean;
   has_elevator?: boolean;
   has_fridge?: boolean;
   has_view?: boolean;
@@ -158,6 +161,8 @@ export type PredictionAnalysisParams = {
   lake_view?: boolean;
   mountain_view?: boolean;
   garden?: boolean;
+  /** 默认 true：请求日级 XGBoost 曲线；设为 false 仅用规则因子回退 */
+  use_daily_xgb?: boolean;
 };
 
 /**
@@ -194,8 +199,29 @@ export const getCompetitorAnalysis = async (
  * @param params 预测参数
  */
 export const getForecast = async (params: PredictionAnalysisParams): Promise<any> => {
+  const {
+    current_price,
+    base_price: explicitBase,
+    river_view: _rv,
+    lake_view: _lv,
+    mountain_view: _mv,
+    use_daily_xgb,
+    ...rest
+  } = params;
+
+  const q: Record<string, string | number | boolean | undefined> = {
+    ...rest,
+    use_daily_xgb: use_daily_xgb !== false,
+  };
+  const anchor = explicitBase ?? current_price;
+  if (anchor != null && Number(anchor) > 0 && Number.isFinite(Number(anchor))) {
+    q.base_price = Number(anchor);
+  }
+  const cleaned = Object.fromEntries(
+    Object.entries(q).filter(([, v]) => v !== undefined && v !== null)
+  );
   const response = await apiClient.get('/api/predict/forecast', {
-    params,
+    params: cleaned,
   });
   return response.data;
 };

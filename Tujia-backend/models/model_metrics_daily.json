@@ -1,0 +1,55 @@
+{
+  "model_type": "XGBoost daily (log1p); static + date -> daily price",
+  "split": "global_date_70_15_15",
+  "split_meta": {
+    "split_mode": "global",
+    "n_unique_dates": 190,
+    "train_dates": 133,
+    "val_dates": 28,
+    "test_dates": 29,
+    "n_train_rows": 257712,
+    "n_val_rows": 55860,
+    "n_test_rows": 48367
+  },
+  "train_metrics": {
+    "mae": 44.246374574402985,
+    "rmse": 104.74447982423632,
+    "r2": 0.9091372236431585,
+    "mape": 10.871582646156133
+  },
+  "val_metrics": {
+    "mae": 65.99490789030344,
+    "rmse": 181.1177289247187,
+    "r2": 0.8042479918944259,
+    "mape": 12.047423513067912
+  },
+  "test_metrics": {
+    "mae": 85.41232800509829,
+    "rmse": 239.71184941272318,
+    "r2": 0.7216756038162555,
+    "mape": 12.799826810800202
+  },
+  "n_train": 257712,
+  "n_val": 55860,
+  "n_test": 48367,
+  "feature_count": 82,
+  "date_features": [
+    "cal_year",
+    "cal_month",
+    "cal_day",
+    "cal_dow",
+    "cal_is_weekend",
+    "cal_week_of_year",
+    "cal_day_of_month",
+    "cal_season",
+    "cal_is_holiday",
+    "cal_is_workday",
+    "cal_is_makeup_workday",
+    "cal_offset_days",
+    "cal_days_before_holiday",
+    "cal_days_after_holiday"
+  ],
+  "lag_features_used": false,
+  "optional_lag_columns": [],
+  "chinesecalendar_note": "建议安装 chinesecalendar：节假日、节前/节后距离、调休"
+}

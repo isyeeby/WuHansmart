@@ -121,14 +121,21 @@ export default function Prediction() {
     form.setFieldsValue({ trade_area: undefined });
   };
 
+  /** 合并「我的房源」各分类标签，与定价工作台勾选逻辑一致（含设施/位置/人群） */
+  const collectListingTags = (listing: MyListing): string[] => [
+    ...(listing.facility_tags || []),
+    ...(listing.location_tags || []),
+    ...(listing.crowd_tags || []),
+  ];
+
   // 选择我的房源后自动填充表单
   const handleSelectMyListing = (listingId: number) => {
     const listing = myListings.find(l => l.id === listingId);
     if (!listing) return;
 
-    // 解析设施标签
-    const facilityTags = listing.facility_tags || [];
-    const locationTags = listing.location_tags || [];
+    const allTags = collectListingTags(listing);
+    const has = (...keywords: string[]) => keywords.some(kw => allTags.some(t => t === kw));
+    const includes = (sub: string) => allTags.some(t => t.includes(sub));
 
     // 更新商圈列表
     if (listing.district) {
@@ -147,29 +154,31 @@ export default function Prediction() {
       bedrooms: listing.bedroom_count,
       bed_count: listing.bed_count || listing.bedroom_count,
       area: listing.area || 50,
-      // 设施
-      has_wifi: facilityTags.includes('WiFi') || facilityTags.includes('无线网络'),
-      has_air_conditioning: facilityTags.includes('空调') || facilityTags.includes('冷暖空调'),
-      has_kitchen: facilityTags.includes('厨房') || facilityTags.includes('可做饭'),
-      has_projector: facilityTags.includes('投影') || facilityTags.includes('巨幕投影'),
-      has_bathtub: facilityTags.includes('浴缸'),
-      has_washer: facilityTags.includes('洗衣机'),
-      has_smart_lock: facilityTags.includes('智能锁') || facilityTags.includes('智能门锁'),
-      has_tv: facilityTags.includes('电视'),
-      has_heater: facilityTags.includes('暖气') || facilityTags.includes('地暖'),
-      has_fridge: facilityTags.includes('冰箱'),
-      // 位置
-      near_metro: locationTags.includes('近地铁'),
-      has_elevator: facilityTags.includes('电梯') || facilityTags.includes('有电梯'),
-      has_terrace: facilityTags.includes('观景露台') || facilityTags.includes('露台'),
-      has_mahjong: facilityTags.includes('麻将') || facilityTags.includes('麻将机'),
-      has_parking: facilityTags.includes('停车位') || facilityTags.includes('免费停车'),
-      pet_friendly: facilityTags.includes('可带宠物'),
-      // 景观特色
-      has_river_view: locationTags.includes('江景'),
-      has_lake_view: locationTags.includes('湖景'),
-      has_mountain_view: locationTags.includes('山景'),
-      has_garden: facilityTags.includes('私家花园') || facilityTags.includes('花园'),
+      // 设施 / 位置 / 人群（与「我的房源」标签库、后端 tags 分类对齐）
+      has_wifi: has('WiFi', '无线网络'),
+      has_air_conditioning: has('空调', '冷暖空调'),
+      has_kitchen: has('厨房', '可做饭'),
+      has_projector: has('投影', '巨幕投影'),
+      has_bathtub: has('浴缸'),
+      has_washer: has('洗衣机'),
+      has_smart_lock: has('智能锁', '智能门锁'),
+      has_tv: has('电视'),
+      has_heater: has('暖气', '地暖'),
+      has_fridge: has('冰箱'),
+      near_metro: has('近地铁'),
+      near_station: has('近火车站') || includes('火车站'),
+      near_university: has('近高校'),
+      near_ski: has('近滑雪场') || includes('滑雪场'),
+      has_elevator: has('电梯', '有电梯'),
+      has_terrace: has('观景露台', '露台'),
+      has_mahjong: has('麻将', '麻将机'),
+      has_big_living_room: has('大客厅'),
+      has_parking: has('停车位', '免费停车', '付费停车位'),
+      pet_friendly: has('可带宠物', '允许宠物'),
+      has_river_view: includes('江景'),
+      has_lake_view: includes('湖景'),
+      has_mountain_view: includes('山景'),
+      has_garden: has('私家花园', '格调小院') || includes('花园'),
     });
 
     message.success(`已加载房源：${listing.title}`);
@@ -205,10 +214,14 @@ export default function Prediction() {
         has_tv: values.has_tv ?? false,
         has_heater: values.has_heater ?? false,
         near_metro: values.near_metro ?? false,
+        near_station: values.near_station ?? false,
+        near_university: values.near_university ?? false,
+        near_ski: values.near_ski ?? false,
         has_elevator: values.has_elevator ?? false,
         has_fridge: values.has_fridge ?? false,
         has_terrace: values.has_terrace ?? false,
         has_mahjong: values.has_mahjong ?? false,
+        has_big_living_room: values.has_big_living_room ?? false,
         has_parking: values.has_parking ?? false,
         pet_friendly: values.pet_friendly ?? false,
         // 景观特色
@@ -221,7 +234,7 @@ export default function Prediction() {
         river_view: values.has_river_view ?? false,
         lake_view: values.has_lake_view ?? false,
         mountain_view: values.has_mountain_view ?? false,
-        garden: values.has_garden ?? false,
+        garden: !!(values.has_garden ?? false),
       };
 
       const [forecast, factors, competitiveness] = await Promise.all([
@@ -273,9 +286,34 @@ export default function Prediction() {
   };
 
   const getPriceChangeReason = (f: any): string => {
+    if (forecastData?.model === 'xgboost_daily' || f.factors?.xgboost_daily != null) {
+      const parts: string[] = [];
+      if (f.is_holiday) parts.push(f.holiday_name ? `${f.holiday_name}（已入模型）` : '节假日（已入模型）');
+      if (f.is_weekend && !f.is_holiday) parts.push('周末（已入模型）');
+      if (
+        f.price_low != null &&
+        f.price_high != null &&
+        Number.isFinite(f.price_low) &&
+        Number.isFinite(f.price_high)
+      ) {
+        parts.push(`区间 ¥${Math.round(f.price_low)}–¥${Math.round(f.price_high)}`);
+      }
+      if (!parts.length) parts.push('日级模型逐日预测');
+      return parts.join('；');
+    }
     const reasons: string[] = [];
-    if (f.is_holiday) reasons.push(`${f.holiday_name || '节假日'}溢价 +${Math.round((f.factors?.holiday - 1) * 100)}%`);
-    if (f.is_weekend && !f.is_holiday) reasons.push(`周末溢价 +${Math.round((f.factors?.weekend - 1) * 100)}%`);
+    const hol = f.factors?.holiday;
+    const wk = f.factors?.weekend;
+    if (f.is_holiday && hol != null && Number.isFinite(hol)) {
+      reasons.push(`${f.holiday_name || '节假日'}溢价 +${Math.round((hol - 1) * 100)}%`);
+    } else if (f.is_holiday) {
+      reasons.push(`${f.holiday_name || '节假日'}溢价`);
+    }
+    if (f.is_weekend && !f.is_holiday && wk != null && Number.isFinite(wk)) {
+      reasons.push(`周末溢价 +${Math.round((wk - 1) * 100)}%`);
+    } else if (f.is_weekend && !f.is_holiday) {
+      reasons.push('周末溢价');
+    }
     if (f.factors?.advance_booking > 1) reasons.push('近期需求旺盛');
     if (f.factors?.advance_booking < 1) reasons.push('提前预订优惠');
     if (!reasons.length) reasons.push('工作日标准定价');
@@ -415,7 +453,9 @@ export default function Prediction() {
     if (!competitivenessData) return {};
     const pa = competitivenessData.pricing_analysis || {};
     const mp = competitivenessData.market_position || {};
-    const names = ['您的定价', '模型合理价', '商圈均价'];
+    const fairLabel =
+      pa.fair_price_model === 'xgboost_daily' ? '模型基准价（锚定日）' : '模型合理价';
+    const names = ['您的定价', fairLabel, '商圈均价'];
     const values = [
       Math.round(pa.user_price || 0),
       Math.round(pa.fair_price || 0),
@@ -711,7 +751,13 @@ export default function Prediction() {
             <Col xs={24} sm={8}>
               <div className="prediction-stat-card p-4">
                 <Statistic
-                  title={<span className="text-xs text-[var(--ink-muted)]">模型预测价</span>}
+                  title={
+                    <span className="text-xs text-[var(--ink-muted)]">
+                      {factorData.reference_model === 'xgboost_daily'
+                        ? '锚定日模型基准价'
+                        : '模型预测价'}
+                    </span>
+                  }
                   value={factorData.predicted_price}
                   prefix="¥"
                   precision={0}
@@ -749,6 +795,18 @@ export default function Prediction() {
                       {factorData.model_info.sample_count?.toLocaleString() ?? '—'}
                     </div>
                   )}
+                </div>
+              )}
+              {factorData.model_info?.r2 == null && factorData.model_info?.mae != null && (
+                <div className="prediction-stat-card p-4">
+                  <div className="mb-1 text-xs text-[var(--ink-muted)]">日级模型验证 MAE</div>
+                  <div
+                    className="text-2xl font-semibold tabular-nums text-[var(--ink-black)]"
+                    style={{ fontFamily: 'var(--font-serif)' }}
+                  >
+                    ¥{Number(factorData.model_info.mae).toFixed(0)}
+                  </div>
+                  <div className="mt-1 text-[11px] text-[var(--ink-muted)]">价格单位误差（元），供参考</div>
                 </div>
               )}
             </Col>
@@ -1164,6 +1222,21 @@ export default function Prediction() {
                       </Form.Item>
                     </Col>
                     <Col span={8}>
+                      <Form.Item name="near_station" valuePropName="checked" noStyle>
+                        <Checkbox>近火车站</Checkbox>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="near_university" valuePropName="checked" noStyle>
+                        <Checkbox>近高校</Checkbox>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="near_ski" valuePropName="checked" noStyle>
+                        <Checkbox>近滑雪场</Checkbox>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
                       <Form.Item name="has_elevator" valuePropName="checked" noStyle>
                         <Checkbox>电梯</Checkbox>
                       </Form.Item>
@@ -1181,6 +1254,11 @@ export default function Prediction() {
                     <Col span={8}>
                       <Form.Item name="has_mahjong" valuePropName="checked" noStyle>
                         <Checkbox>麻将机</Checkbox>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item name="has_big_living_room" valuePropName="checked" noStyle>
+                        <Checkbox>大客厅</Checkbox>
                       </Form.Item>
                     </Col>
                     <Col span={8}>

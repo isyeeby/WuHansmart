@@ -243,9 +243,15 @@ def main() -> None:
     print(f"\n划分完成: 训练 {len(train_df)} / 测试 {len(test_df)}")
 
     # 预处理（与XGBoost相同）
-    train_df, test_df, encoders, district_stats, feature_cols, calendar_defaults = (
-        preprocess_after_split(train_df, test_df)
-    )
+    (
+        train_df,
+        test_df,
+        encoders,
+        district_stats,
+        feature_cols,
+        calendar_defaults,
+        _trade_area_stats,
+    ) = preprocess_after_split(train_df, test_df)
     if len(train_df) < 50 or len(test_df) < 10:
         print("错误: 训练或测试样本过少")
         sys.exit(1)

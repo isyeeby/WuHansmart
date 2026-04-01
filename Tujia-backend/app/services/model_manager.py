@@ -5,7 +5,6 @@ import os
 import json
 import joblib
 import logging
-import math
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +14,14 @@ import xgboost as xgb
 import pandas as pd
 
 from app.ml.calendar_features import CALENDAR_FEATURE_NAMES
-from app.ml.price_feature_config import compute_is_budget_structural, ordered_facility_columns
+from app.ml.price_feature_config import (
+    beds_per_room,
+    compute_is_budget_structural,
+    log1p_area,
+    log1p_capacity,
+    log1p_favorite,
+    ordered_facility_columns,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +59,9 @@ class ModelManager:
         self.recommender_meta: Optional[Dict] = None
         # 无 unit_id / 无日历时，与训练集一致的默认日历特征（cal_n_days=0）
         self.calendar_defaults: Dict[str, float] = {}
+        # 未提供评分/收藏时与训练一致的填充（cold_start_inference_defaults.json）
+        self.cold_start_numerics: Dict[str, float] = {}
+        self.trade_area_target_stats: Dict[str, Dict[str, float]] = {}
 
         # 自动加载模型
         self._load_models()
@@ -156,6 +165,14 @@ class ModelManager:
             else:
                 self.calendar_defaults = {}
 
+            cold_num_path = self.models_dir / "cold_start_inference_defaults.json"
+            if cold_num_path.exists():
+                with open(cold_num_path, "r", encoding="utf-8") as f:
+                    self.cold_start_numerics = {k: float(v) for k, v in json.load(f).items()}
+                logger.info("Cold-start inference defaults loaded: %s", cold_num_path.name)
+            else:
+                self.cold_start_numerics = {}
+
             # 加载行政区统计信息 (用于目标编码)
             district_stats_path = self.models_dir / "district_stats.json"
             if district_stats_path.exists():
@@ -174,6 +191,27 @@ class ModelManager:
             else:
                 self.district_stats = {}
                 logger.warning("District stats file not found")
+
+            ta_path = self.models_dir / "trade_area_target_stats.json"
+            if ta_path.exists():
+                with open(ta_path, "r", encoding="utf-8") as f:
+                    for item in json.load(f):
+                        key = str(item.get("trade_area", ""))
+                        if not key:
+                            continue
+                        self.trade_area_target_stats[key] = {
+                            "ta_mean": float(item.get("ta_mean", 0)),
+                            "ta_median": float(item.get("ta_median", 0)),
+                            "ta_std": float(item.get("ta_std", 0)),
+                            "ta_count": float(item.get("ta_count", 0)),
+                        }
+                logger.info(
+                    "Trade-area target stats loaded: %s (%d areas)",
+                    ta_path.name,
+                    len(self.trade_area_target_stats),
+                )
+            else:
+                self.trade_area_target_stats = {}
 
             # 加载元数据
             meta_file = latest_model_path.with_suffix('.json')
@@ -317,8 +355,33 @@ class ModelManager:
             bedroom_count = features.get('bedroom_count', 1)
             bed_count = features.get('bed_count', bedroom_count)
             capacity = features.get('capacity', bedroom_count * 2)
-            rating = features.get('rating', 4.85)
-            favorite_count = features.get('favorite_count', 100)
+
+            r_med = float(self.cold_start_numerics.get("rating_median", 4.5))
+            if "has_rating_ob" in feature_names:
+                if features.get("has_rating_ob") is not None:
+                    has_rating_ob = int(features.get("has_rating_ob") or 0)
+                else:
+                    has_rating_ob = 0 if features.get("rating") is None else 1
+                rating = r_med if has_rating_ob == 0 else float(features.get("rating") or r_med)
+            else:
+                has_rating_ob = 1
+                _rv = features.get("rating")
+                rating = float(_rv if _rv is not None else 4.85)
+
+            if "has_favorite_ob" in feature_names:
+                if features.get("has_favorite_ob") is not None:
+                    has_favorite_ob = int(features.get("has_favorite_ob") or 0)
+                else:
+                    has_favorite_ob = 0 if features.get("favorite_count") is None else 1
+                favorite_count = (
+                    0
+                    if has_favorite_ob == 0
+                    else int(features.get("favorite_count") or 0)
+                )
+            else:
+                has_favorite_ob = 1
+                _fv = features.get("favorite_count")
+                favorite_count = int(_fv if _fv is not None else 100)
 
             # 行政区编码和目标编码
             if self.district_encoder and district in self.district_encoder:
@@ -345,6 +408,23 @@ class ModelManager:
                 dist_std = 100
                 dist_count = 10
 
+            tas = self.trade_area_target_stats.get(trade_area) if self.trade_area_target_stats else None
+            if tas:
+                ta_mean = float(tas.get("ta_mean", dist_mean))
+                ta_median = float(tas.get("ta_median", dist_median))
+                ta_std = float(tas.get("ta_std", dist_std))
+                ta_count = float(tas.get("ta_count", dist_count))
+            else:
+                ta_mean = float(dist_mean)
+                ta_median = float(dist_median)
+                ta_std = float(dist_std)
+                ta_count = float(dist_count)
+
+            if features.get("hot_water") is not None:
+                hot_water_v = int(bool(features.get("hot_water")))
+            else:
+                hot_water_v = 1 if features.get("has_heater") else 0
+
             # 房屋类型编码（优先使用训练导出的映射表，保证与 XGBoost 特征一致）
             house_type = str(features.get('house_type', '整套') or '整套')
             if self.house_type_encoder:
@@ -361,7 +441,11 @@ class ModelManager:
                 'near_ski': features.get('near_ski', 0),
                 'river_view': 1 if features.get('has_view') and '江景' in str(features.get('view_type', '')) else features.get('river_view', 0),
                 'lake_view': 1 if features.get('has_view') and '湖景' in str(features.get('view_type', '')) else features.get('lake_view', 0),
-                'mountain_view': features.get('mountain_view', 0),
+                'mountain_view': (
+                    1
+                    if features.get('has_view') and '山景' in str(features.get('view_type', ''))
+                    else features.get('mountain_view', 0)
+                ),
                 'terrace': features.get('has_terrace', 0) or features.get('terrace', 0),
                 'sunroom': features.get('sunroom', 0),
                 'garden': features.get('garden', 0),
@@ -380,7 +464,7 @@ class ModelManager:
                 'smart_lock': features.get('has_smart_lock', 0) or features.get('smart_lock', 0),
                 'smart_toilet': features.get('smart_toilet', 0),
                 'ac': features.get('has_air_conditioning', 1) or features.get('ac', 1),
-                'hot_water': features.get('hot_water', 1),
+                'hot_water': hot_water_v,
                 'elevator': features.get('has_elevator', 0) or features.get('elevator', 0),
                 'pet_friendly': features.get('pet_friendly', 0),
                 'free_parking': features.get('has_parking', 0) or features.get('free_parking', 0),
@@ -404,7 +488,8 @@ class ModelManager:
             is_large = 1 if (bedroom_count >= 4 or area >= 150) else 0
             is_budget = compute_is_budget_structural(area, bedroom_count)
             area_per_bedroom = area / (bedroom_count + 1)
-            heat_score = rating * math.log(favorite_count + 1)
+            heat_score = float(favorite_count) * float(rating) / 10.0
+            l1a = log1p_area(area)
 
             # 设施数量：对 FACILITY_KEYWORDS 映射列求和，与训练时 facility_count 定义一致
             _fac_cols = ordered_facility_columns()
@@ -414,12 +499,15 @@ class ModelManager:
             latitude = features.get('latitude', 30.5)
             longitude = features.get('longitude', 114.3)
 
-            # 构建完整特征字典
-            full_features = {
+            # 构建完整特征字典（仅包含当前模型 feature_names 中存在的键）
+            full_features: Dict[str, Any] = {
                 'rating': rating,
                 'area': area,
+                'log1p_area': l1a,
+                'log1p_favorite': log1p_favorite(favorite_count),
                 'bedroom_count': bedroom_count,
                 'bed_count': bed_count,
+                'beds_per_room': beds_per_room(bed_count, bedroom_count),
                 'capacity': capacity,
                 'favorite_count': favorite_count,
                 'latitude': latitude,
@@ -432,11 +520,22 @@ class ModelManager:
                 'dist_median': dist_median,
                 'dist_std': dist_std,
                 'dist_count': dist_count,
+                'ta_mean': ta_mean,
+                'ta_median': ta_median,
+                'ta_std': ta_std,
+                'ta_count': ta_count,
                 'house_type_encoded': house_type_encoded,
                 'area_per_bedroom': area_per_bedroom,
                 'heat_score': heat_score,
                 'facility_count': facility_count,
+                'log1p_capacity': log1p_capacity(capacity),
+                'capacity_per_area': float(capacity) / (float(area) + 1.0),
+                'rating_x_log1p_area': float(rating) * l1a,
             }
+            if "has_rating_ob" in feature_names:
+                full_features["has_rating_ob"] = float(has_rating_ob)
+            if "has_favorite_ob" in feature_names:
+                full_features["has_favorite_ob"] = float(has_favorite_ob)
             # 添加设施特征
             full_features.update(facility_mapping)
 

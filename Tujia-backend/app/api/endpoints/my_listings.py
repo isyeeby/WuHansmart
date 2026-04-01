@@ -6,7 +6,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.models import schemas
 from app.db.database import get_db, get_user_by_username
@@ -423,6 +423,94 @@ async def get_competitors(
     )
 
 
+def _normalize_tag_list(raw: Any) -> List[str]:
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    return []
+
+
+def my_listing_to_prediction_request(ml: Any) -> schemas.PredictionRequest:
+    """
+    将 my_listings 行转为 PredictionRequest，标签合并规则与前端智能定价「选择我的房源」一致。
+    """
+    all_tags = (
+        _normalize_tag_list(ml.facility_tags)
+        + _normalize_tag_list(ml.location_tags)
+        + _normalize_tag_list(ml.crowd_tags)
+    )
+
+    def has(*keywords: str) -> bool:
+        return any(k in all_tags for k in keywords)
+
+    def includes(sub: str) -> bool:
+        return any(sub in t for t in all_tags)
+
+    try:
+        area_f = float(ml.area) if ml.area is not None else 50.0
+    except (TypeError, ValueError):
+        area_f = 50.0
+    area_i = int(max(10, min(500, round(area_f))))
+    bd = int(ml.bedroom_count or 1)
+    bc = int(ml.bed_count or bd)
+    cap = int(ml.max_guests or max(2, bc * 2))
+    cap = max(1, min(20, cap))
+    room_type = "整套房屋" if bd >= 2 else "独立房间"
+
+    lat = float(ml.latitude) if ml.latitude is not None else None
+    lng = float(ml.longitude) if ml.longitude is not None else None
+
+    view_parts: List[str] = []
+    if includes("江景"):
+        view_parts.append("江景")
+    if includes("湖景"):
+        view_parts.append("湖景")
+    if includes("山景"):
+        view_parts.append("山景")
+    view_type = ",".join(view_parts) if view_parts else None
+    has_view = bool(view_parts) or has("景观房")
+
+    return schemas.PredictionRequest(
+        district=ml.district or "未知",
+        trade_area=(ml.business_circle or ml.district or None),
+        unit_id=None,
+        room_type=room_type,
+        capacity=cap,
+        bedrooms=bd,
+        bed_count=max(1, bc),
+        bathrooms=int(ml.bathroom_count or 1),
+        area=area_i,
+        has_wifi=has("WiFi", "无线网络"),
+        has_kitchen=has("厨房", "可做饭"),
+        has_air_conditioning=has("空调", "冷暖空调"),
+        has_projector=has("投影", "巨幕投影"),
+        has_bathtub=has("浴缸"),
+        has_washer=has("洗衣机"),
+        has_smart_lock=has("智能锁", "智能门锁"),
+        has_tv=has("电视"),
+        has_heater=has("暖气", "地暖"),
+        near_metro=has("近地铁"),
+        near_station=has("近火车站") or includes("火车站"),
+        near_university=has("近高校"),
+        near_ski=has("近滑雪场") or includes("滑雪场"),
+        has_elevator=has("电梯", "有电梯"),
+        has_fridge=has("冰箱"),
+        has_terrace=has("观景露台", "露台"),
+        has_mahjong=has("麻将", "麻将机"),
+        has_big_living_room=has("大客厅"),
+        has_parking=has("停车位", "免费停车", "付费停车位"),
+        pet_friendly=has("可带宠物", "允许宠物"),
+        has_view=has_view,
+        view_type=view_type,
+        garden=has("私家花园", "格调小院") or includes("花园"),
+        rating=None,
+        favorite_count=None,
+        latitude=lat,
+        longitude=lng,
+    )
+
+
 def _build_comparison_analysis(
     my_price: float, avg_price: float, competitor_prices: list
 ) -> dict:
@@ -466,10 +554,12 @@ async def get_price_suggestion(
 ):
     """
     获取定价建议
-    
-    基于XGBoost模型预测最优定价，给出调价建议
+
+    优先使用日级 XGBoost 的 **base_price**（与「智能定价」页「模型基准价」一致：锚定首日建议价）；
+    若日级不可用则回退房源级 XGBoost 单点；再失败则回退行政区样本均价。
     """
     from app.db.database import get_my_listing_by_id, Listing
+    from app.services.daily_price_service import daily_forecast_service
     from app.services.price_predictor import model_service
 
     uid = _resolve_db_user_id(db, current_user_id)
@@ -478,90 +568,50 @@ async def get_price_suggestion(
         raise HTTPException(status_code=404, detail="房源不存在")
 
     current_price = float(my_listing.current_price)
-    
-    # 解析设施标签
-    facilities = my_listing.facility_tags or []
-    
-    # 高溢价设施识别
-    has_mahjong = 1 if any('麻将' in str(f) for f in facilities) else 0
-    has_bathtub = 1 if any('浴缸' in str(f) for f in facilities) else 0
-    has_kitchen = 1 if any('厨房' in str(f) for f in facilities) else 0
-    
-    # 其他设施识别
-    has_projector = 1 if any('投影' in str(f) for f in facilities) else 0
-    has_washer = 1 if any('洗衣' in str(f) for f in facilities) else 0
-    has_smart_lock = 1 if any('智能锁' in str(f) for f in facilities) else 0
-    has_view = 1 if any('江景' in str(f) or '湖景' in str(f) or '景观' in str(f) for f in facilities) else 0
-    has_tv = 1 if any('电视' in str(f) for f in facilities) else 0
-    has_fridge = 1 if any('冰箱' in str(f) for f in facilities) else 0
-    has_elevator = 1 if any('电梯' in str(f) for f in facilities) else 0
-    near_metro = 1 if any('地铁' in str(f) for f in facilities) else 0
-    has_terrace = 1 if any('露台' in str(f) or '阳台' in str(f) for f in facilities) else 0
-    
-    # 构建模型预测特征
-    predict_features = {
-        'district': my_listing.district,
-        'trade_area': my_listing.business_circle or my_listing.district,
-        'bedroom_count': my_listing.bedroom_count,
-        'bed_count': my_listing.bed_count,
-        'bathroom_count': my_listing.bathroom_count,
-        'area': my_listing.area or 50,
-        'capacity': my_listing.max_guests,
-        # 高溢价设施
-        'has_mahjong': has_mahjong,
-        'has_bathtub': has_bathtub,
-        'has_kitchen': has_kitchen,
-        # 其他设施
-        'has_projector': has_projector,
-        'has_washer': has_washer,
-        'has_smart_lock': has_smart_lock,
-        'has_view': has_view,
-        'has_tv': has_tv,
-        'has_fridge': has_fridge,
-        'has_elevator': has_elevator,
-        'near_metro': near_metro,
-        'has_terrace': has_terrace,
-        'has_air_conditioning': 1,  # 默认有空调
-        'has_wifi': 1,  # 默认有WiFi
-        'has_heater': 1,  # 默认有热水器
-        # 默认值
-        'rating': 4.85,
-        'favorite_count': 100,
-        'pic_count': 30,
-    }
-    
-    # 使用XGBoost模型预测
-    suggested_price = model_service.manager.predict_price(predict_features)
-    
-    reasoning = []
-    
-    # 分析设施优势
-    if has_mahjong:
-        reasoning.append("麻将机带来约16元溢价")
-    if has_bathtub:
-        reasoning.append("浴缸带来约13元溢价")
-    if has_kitchen:
-        reasoning.append("厨房设施增加实用性")
-    if has_projector:
-        reasoning.append("投影设施提升娱乐体验")
-    if has_view:
-        reasoning.append("景观房具有位置优势")
-    if near_metro:
-        reasoning.append("近地铁交通便利")
-    
-    # 如果模型预测失败，使用市场均价
+    pred_req = my_listing_to_prediction_request(my_listing)
+
+    suggested_price: Optional[float] = None
+    reasoning: List[str] = []
+
+    if daily_forecast_service.available():
+        daily_out = daily_forecast_service.predict_forecast_14(pred_req, n_days=14)
+        if daily_out is not None and daily_out.get("base_price") is not None:
+            suggested_price = float(daily_out["base_price"])
+
     if suggested_price is None:
-        competitors = db.query(Listing).filter(
-            Listing.district == my_listing.district
-        ).limit(50).all()
-        
+        try:
+            suggested_price = float(model_service.predict(pred_req))
+            reasoning.append("日级模型不可用，已改用房源级 XGBoost 单点预测")
+        except Exception:
+            suggested_price = None
+
+    if suggested_price is None:
+        competitors = db.query(Listing).filter(Listing.district == my_listing.district).limit(50).all()
         if competitors:
-            suggested_price = sum([float(c.final_price or 0) for c in competitors]) / len(competitors)
+            suggested_price = sum(float(c.final_price or 0) for c in competitors) / len(competitors)
+            reasoning.append("模型不可用，基于同行政区样本挂牌均价估算")
         else:
             suggested_price = current_price
-        reasoning.append("基于市场均价计算")
-    else:
-        reasoning.append("基于AI模型预测")
+            reasoning.append("缺少可比数据，建议价暂等于当前价")
+
+    # 设施亮点（与标签一致，便于房东理解）
+    tags = (
+        _normalize_tag_list(my_listing.facility_tags)
+        + _normalize_tag_list(my_listing.location_tags)
+        + _normalize_tag_list(my_listing.crowd_tags)
+    )
+    if any("麻将" in t for t in tags):
+        reasoning.append("含麻将机等娱乐设施可支撑一定溢价")
+    if any("浴缸" in t for t in tags):
+        reasoning.append("含浴缸等体验型设施")
+    if any("厨房" in t or "可做饭" in t for t in tags):
+        reasoning.append("可做饭/厨房提升实用性")
+    if any("投影" in t for t in tags):
+        reasoning.append("投影等影音设施提升卖点")
+    if any("江景" in t or "湖景" in t or "山景" in t or "景观" in t for t in tags):
+        reasoning.append("景观或位置标签有助于差异化定价")
+    if any("地铁" in t for t in tags):
+        reasoning.append("近地铁等交通便利性通常更受青睐")
     
     # 根据卧室数量调整
     if my_listing.bedroom_count >= 2:

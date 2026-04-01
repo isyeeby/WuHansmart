@@ -1,20 +1,20 @@
 {
   "metrics": {
-    "mae": 18.268583204688095,
-    "rmse": 32.331170727991854,
-    "r2": 0.9120817963766814,
-    "mape": 9.274984124749771
+    "mae": 39.82848973778205,
+    "rmse": 99.01429176080644,
+    "r2": 0.6487275945073325,
+    "mape": 18.582351542856106
   },
   "train_metrics": {
-    "mae": 3.393985074995008,
-    "rmse": 6.0227719825068355,
-    "r2": 0.9979287823806755,
-    "mape": 1.6738648440835415
+    "mae": 24.93496531217775,
+    "rmse": 40.247467636907835,
+    "r2": 0.8800493598335941,
+    "mape": 12.17326736719543
   },
-  "trained_at": "2026-03-31T22:05:38.701804",
+  "trained_at": "2026-04-01T16:09:55.342729",
   "model_type": "XGBoost Regressor (log1p target)",
-  "data_source": "MySQL Database",
-  "feature_count": 73,
+  "data_source": "MySQL Database (auto fallback)",
+  "feature_count": 77,
   "sample_count_train": 1966,
   "sample_count_test": 492,
   "sample_count_total": 2458,
@@ -72,14 +72,17 @@
   },
   "methodology": {
     "split": "stratified_holdout_80_20_first_fold_price_bucket",
-    "target_encoding": "district price moments estimated on training split only",
+    "target_encoding": "district + trade_area price moments estimated on training split only; sparse trade_area uses district fallback",
     "categorical_encoding": "integer codes fitted on training split only; OOV -> 0",
     "target_transform": "log1p(price); prediction expm1",
     "is_budget_definition": "structural: area<30 and bedroom_count<=1 (no price in feature)",
     "facility_count": "sum of binary facility columns in FACILITY_KEYWORDS mapping",
+    "heat_score": "favorite_count * rating / 10 (train + ModelManager)",
     "sample_weights": "higher weight for price<100 and price>500 in training",
-    "n_estimators": "600 trees; eval_set held-out log-target for monitoring (no early stop if sklearn fit API lacks callbacks)",
-    "price_calendar_features": "Per-unit aggregates (CALENDAR_FEATURE_NAMES): from MySQL price_calendars when training on MySQL; from Hive ODS ods_price_calendar when training on Hive (weekend premium may be 0 if not computed in the warehouse). Missing calendar imputed with train-split medians among units with calendar."
+    "early_stopping": "85/15 split inside training fold; validation uses cold calendar defaults; native xgb.train with early_stopping_rounds; test set never used for rounds",
+    "calendar_robust_training": "Training rows: each sample's calendar features replaced by defaults with probability TRAIN_CALENDAR_DROPOUT_PROB (default 0.5).",
+    "train_test_evaluation": "Reported train and test metrics both predict with calendar columns = calendar_feature_defaults.json (same as API; no per-row merged calendar at eval).",
+    "price_calendar_features": "Per-unit aggregates (CALENDAR_FEATURE_NAMES): from MySQL price_calendars when training on MySQL; from Hive ODS ods_price_calendar when training on Hive (weekend premium may be 0 if not computed in the warehouse). Listings with calendar rows but all daily prices <= 0 are dropped before training. Missing calendar imputed with train-split medians among units with calendar."
   },
   "calendar_feature_names": [
     "cal_n_days",
@@ -101,7 +104,9 @@
     "is_budget: 结构定义(面积+卧室数)，不含房价",
     "facility_count: 与线上一致的二值设施求和",
     "encoders: district + trade_area + house_type 持久化",
-    "price_calendar: 动态定价统计特征 + 训练集条件中位数填充",
-    "n_estimators=600: 固定轮数（环境不支持 fit 早停参数时）"
+    "price_calendar: 离线造特征 + 训练集条件中位数填充",
+    "calendar_dropout + cold_calendar_early_stop: 对齐线上不查库",
+    "train_test_metrics: 训练/测试集评估预测时日历=默认值，与 API 一致",
+    "trade_area_target_encoding: ta_mean/median/std/count + trade_area_target_stats.json"
   ]
 }
