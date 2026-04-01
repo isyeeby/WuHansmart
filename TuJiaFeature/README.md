@@ -4,6 +4,8 @@
 
 基于大数据的民宿价格分析与预测系统**前端**。面向房东与投资者，展示武汉途家市场行情与智能定价相关能力。
 
+**Monorepo 说明**：本目录在完整仓库中为 **`TuJiaFeature/`**。单独拉「前端部署分支」时，使用远程分支 **`deploy-frontend`**（由 `git subtree split --prefix=TuJiaFeature` 生成，根目录即本前端内容）。详见仓库根目录 [`../deploy/README.md`](../deploy/README.md)。
+
 ## 技术栈
 
 - **前端**: React 19, TypeScript, Ant Design 5, ECharts, Tailwind CSS

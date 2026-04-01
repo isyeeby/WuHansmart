@@ -2,6 +2,8 @@
 
 基于大数据的民宿价格数据分析系统后端服务，使用 FastAPI + Hive + XGBoost 构建。
 
+**Monorepo 说明**：本目录在完整仓库中为 **`Tujia-backend/`**。单独拉「后端部署分支」时，使用远程分支 **`deploy-backend`**（由 `git subtree split --prefix=Tujia-backend` 生成，根目录即本后端内容）。详见仓库根目录 [`../deploy/README.md`](../deploy/README.md)。
+
 ## 数据层说明（Hive 与 MySQL）
 
 **线上运行时**以 **MySQL** 为权威数据源（列表、详情、驾驶舱、推荐、预测等默认只读 MySQL），部署简单、延迟低。**Apache Hive** 用于离线清洗、分层分析、模型训练特征与**导数入库**；生产建议 `HIVE_ANALYTICS_PRIMARY=false`（见 [.env.example](.env.example)）。详见 [docs/DATA_LAYER_AND_RUNTIME.md](docs/DATA_LAYER_AND_RUNTIME.md)。

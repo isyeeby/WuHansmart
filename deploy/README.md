@@ -1,12 +1,21 @@
 # 部署说明（途家 monorepo）
 
+## 目录与部署分支对应（同步时按此对照）
+
+| monorepo 中的目录 | 应对应刷新的 Git 分支 | 克隆后仓库根目录内容 |
+|-------------------|----------------------|----------------------|
+| **`Tujia-backend/`** | **`deploy-backend`** | 与 `Tujia-backend` 子目录一致（后端单独仓库视图） |
+| **`TuJiaFeature/`** | **`deploy-frontend`** | 与 `TuJiaFeature` 子目录一致（前端单独仓库视图） |
+
+也就是说：**改后端只同步 `Tujia-backend` → 推 `deploy-backend`；改前端只同步 `TuJiaFeature` → 推 `deploy-frontend`。** 两者都由 `main` 上的对应前缀通过 `git subtree split` 生成。
+
 ## 仓库分支
 
 | 分支 | 内容 | 典型用途 |
 |------|------|----------|
 | `main` | 前端 `TuJiaFeature/` + 后端 `Tujia-backend/` + 本目录 Nginx 示例 | 完整源码、联调、文档 |
-| `deploy-backend` | 仅后端目录历史（`git subtree split`，仓库根即 `Tujia-backend` 内容） | 服务器只拉后端、CI 只构建 API |
-| `deploy-frontend` | 仅前端目录历史（根即 `TuJiaFeature`） | 静态托管/只构建前端 |
+| `deploy-backend` | 仅 **`Tujia-backend/`** 目录历史（`git subtree split --prefix=Tujia-backend`），仓库根即后端项目 | 服务器只拉后端、CI 只构建 API |
+| `deploy-frontend` | 仅 **`TuJiaFeature/`** 目录历史（`--prefix=TuJiaFeature`），仓库根即前端项目 | 静态托管/只构建前端 |
 
 创建子树分支（在 `main` 提交之后执行一次即可）：
 
