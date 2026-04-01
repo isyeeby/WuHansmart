@@ -195,7 +195,7 @@ export default function Opportunities() {
     },
     {
       title: (
-        <Tooltip title="模型：XGBoost；区中位数：模型不可用时的兜底参考。">
+        <Tooltip title="日级：智能定价同源锚定日基准价；房源级：日级不可用时的单点回退；区中位数：模型不可用时的兜底。">
           <span className="cursor-help border-b border-dotted border-gray-400">估算依据</span>
         </Tooltip>
       ),
@@ -203,6 +203,8 @@ export default function Opportunities() {
       key: 'prediction_source',
       width: 100,
       render: (src: string | undefined) => {
+        if (src === 'xgboost_daily') return <Tag color="processing">日级模型</Tag>;
+        if (src === 'xgboost_listing') return <Tag color="cyan">房源级</Tag>;
         if (src === 'xgboost') return <Tag color="processing">模型</Tag>;
         if (src === 'district_median') return <Tag>区中位数</Tag>;
         return <Tag color="default">—</Tag>;
