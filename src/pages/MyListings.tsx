@@ -1330,7 +1330,7 @@ const MyListings: React.FC = () => {
         <Divider className="!my-4 !border-[#f5f2ed]" />
         <p className="mb-3 text-xs leading-relaxed text-[#999]">
           参考价与「智能定价」中的<strong className="text-[#6b6b6b]">模型基准价</strong>
-          一致（日级 XGBoost 对锚定日的建议价）；不可用则回退房源级模型或行政区样本均价。查看未来 14
+          一致（日级 XGBoost 对锚定日的建议价）；不可用则回退行政区样本均价。查看未来 14
           天逐日价格与趋势请前往
           <Link to="/prediction" className="mx-0.5 text-[#c45c3e] underline-offset-2 hover:underline">
             智能定价

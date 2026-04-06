@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, Row, Col, Button, Typography, Tag, Spin, Tooltip, Alert } from 'antd';
+import { Card, Row, Col, Button, Typography, Tag, Spin, Alert } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'motion/react';
 import {
@@ -19,6 +19,7 @@ import {
   AppstoreOutlined,
   PlusCircleOutlined,
 } from '@ant-design/icons';
+import { ZenRichTooltip } from '../components/zen/ZenRichTooltip';
 import { ZEN_COLORS, createLineOption } from '../utils/echartsTheme';
 import { getKpiDashboard, getTopDistricts, getDashboardTrends, type KpiData, type TopDistrict, type TrendData } from '../services/dashboardApi';
 import { getHomeRecommendations, type HomeRecommendation } from '../services/homeApi';
@@ -62,7 +63,7 @@ const QUICK_LINKS_BASE: QuickLinkItem[] = [
     to: '/recommendation',
     icon: <HeatMapOutlined />,
     title: '个性化推荐',
-    desc: '按问卷偏好',
+    desc: '根据需求推荐',
     color: ZEN_COLORS.ochre,
     bgColor: 'rgba(196, 92, 62, 0.1)',
   },
@@ -94,7 +95,7 @@ const QUICK_LINKS_BASE: QuickLinkItem[] = [
     to: '/investment',
     icon: <BarChartOutlined />,
     title: '投资分析',
-    desc: 'ROI计算器',
+    desc: '计算器 · 洼地',
     color: ZEN_COLORS.jade,
     bgColor: 'rgba(90, 138, 110, 0.1)',
   },
@@ -105,14 +106,6 @@ const QUICK_LINKS_BASE: QuickLinkItem[] = [
     desc: '多维度分析',
     color: ZEN_COLORS.gold,
     bgColor: 'rgba(184, 149, 110, 0.1)',
-  },
-  {
-    to: '/opportunities',
-    icon: <ThunderboltOutlined />,
-    title: '价格洼地',
-    desc: '投资机会',
-    color: ZEN_COLORS.ochre,
-    bgColor: 'rgba(196, 92, 62, 0.1)',
   },
   {
     to: '/favorites',
@@ -133,12 +126,10 @@ function orderQuickLinksForRole(role: string | null | undefined): QuickLinkItem[
       '/listings',
       '/recommendation',
       '/investment',
-      '/opportunities',
       '/favorites',
     ],
     investor: [
       '/investment',
-      '/opportunities',
       '/comparison',
       '/recommendation',
       '/listings',
@@ -152,7 +143,6 @@ function orderQuickLinksForRole(role: string | null | undefined): QuickLinkItem[
       '/favorites',
       '/comparison',
       '/investment',
-      '/opportunities',
       '/prediction',
       '/my-listings',
     ],
@@ -272,7 +262,16 @@ const Home: React.FC = () => {
       suffix: '个',
       icon: <EnvironmentOutlined />,
       color: ZEN_COLORS.jade,
-      tooltip: '平台数据覆盖的商圈/行政区数量，反映数据广度',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            当前数据库里，房源所归属的<strong>不同行政区（或商圈维度）</strong>的数量，用来表示「样本在地理上铺得多开」。
+          </p>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            数字越大说明覆盖片区越多，但不等于每个区房源一样多；具体分布可看下方热门商圈图。
+          </p>
+        </div>
+      ),
     },
     {
       label: '房源样本',
@@ -280,7 +279,16 @@ const Home: React.FC = () => {
       suffix: '套',
       icon: <HomeOutlined />,
       color: ZEN_COLORS.ochre,
-      tooltip: '平台收录的民宿房源总数，用于价格分析和趋势预测',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            平台当前收录的<strong>在架民宿条数</strong>（以库内 listings 为准），是后面均价、热度、吸引力等指标的<strong>统计母体</strong>。
+          </p>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            这是「样本量」不是订单量；爬虫/导入更新后数字会变。
+          </p>
+        </div>
+      ),
     },
     {
       label: '全市均价',
@@ -288,7 +296,19 @@ const Home: React.FC = () => {
       suffix: '元',
       icon: <BarChartOutlined />,
       color: ZEN_COLORS.gold,
-      tooltip: '全市民宿的平均日租金价格，基于近期成交数据计算',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            把当前库内所有房源的<strong>展示价/日价（final_price）</strong>做一个简单<strong>算术平均</strong>，用来粗看「整体价格带」落在哪。
+          </p>
+          <p className="mb-1 text-[var(--ink-muted)]">
+            <strong>不是</strong>「今日成交价」，也<strong>不是</strong>某一天的日历均价；若少数极高价或极低价房源很多，平均会被拉高或拉低。
+          </p>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            想看随时间变化，请结合下方价格曲线与「价格趋势」卡片。
+          </p>
+        </div>
+      ),
     },
     {
       label: '需求热度',
@@ -296,7 +316,22 @@ const Home: React.FC = () => {
       suffix: '%',
       icon: <StarOutlined />,
       color: ZEN_COLORS.gold,
-      tooltip: '基于评分与收藏数构建的代理指标，反映市场关注度（非真实入住率）',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            这是<strong>关注度代理指数</strong>（约在 <strong>50～92</strong>），旁边的「%」仅作展示，
+            <strong>不是</strong>酒店 PMS 里的真实入住率，也<strong>不是</strong>订单转化数据。
+          </p>
+          <p className="mb-1 font-medium text-[var(--ink-black)]">怎么来的（与后台一致）：</p>
+          <ul className="mb-2 list-disc space-y-1 pl-4 text-[var(--ink-muted)]">
+            <li>在「全平台平均评分、平均收藏数」基础上做加权：评分越高、收藏越多，指数越高。</li>
+            <li>整体限制在约 50～92，避免极端值不好读。</li>
+          </ul>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            「市场吸引力」会用到同一套热度思路；若要真实预订情况需对接订单或日历占房数据。
+          </p>
+        </div>
+      ),
     },
     {
       label: '价格趋势',
@@ -304,7 +339,26 @@ const Home: React.FC = () => {
       suffix: '%',
       icon: <ArrowUpOutlined />,
       color: ZEN_COLORS.ochre,
-      tooltip: '本月截至今日与上月同期的价格变化百分比，基于价格日历日均值对比计算',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            表示<strong>日历日均价</strong>相对上一段对照期的<strong>涨跌幅度（%）</strong>：正数偏多表示近期日历上标的日价整体略高，负数偏多表示略低。
+          </p>
+          <p className="mb-1 font-medium text-[var(--ink-black)]">对照期怎么选：</p>
+          <ol className="mb-2 list-decimal space-y-1 pl-4 text-[var(--ink-muted)]">
+            <li>
+              <strong>优先</strong>：本月 1 号到今天，与<strong>上个月同一天为止</strong>的那一段，按「每天先平均再对天求平均」后比一比。
+            </li>
+            <li>
+              <strong>若上月头几天没有日历数据</strong>（很常见），会自动改成：最近 14 天 vs 再往前 14 天；仍不行再试 7 天。
+            </li>
+            <li>若库里几乎没有价格日历，这一项会显示 <strong>0</strong>。</li>
+          </ol>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            与上方「全市均价」口径不同：这里看的是<strong>带日期的日历价</strong>随时间的变化，不是单次的挂牌截面平均。
+          </p>
+        </div>
+      ),
     },
     {
       label: '市场吸引力',
@@ -312,7 +366,27 @@ const Home: React.FC = () => {
       suffix: '%',
       icon: <ThunderboltOutlined />,
       color: ZEN_COLORS.jade,
-      tooltip: '综合评分、收藏、供给等因素构建的启发式吸引力指数（非财务ROI）',
+      tooltip: (
+        <div className="max-w-[300px] text-xs leading-relaxed">
+          <p className="mb-2 text-[var(--ink-black)]">
+            这是<strong>综合吸引力指数</strong>（结果约在 <strong>5～26</strong> 之间）。旁边的「%」只是展示习惯，
+            <strong>不是</strong>理财意义上的年化收益率或真实投资回报。
+          </p>
+          <p className="mb-1 font-medium text-[var(--ink-black)]">计算思路（与后台一致）：</p>
+          <ol className="mb-2 list-decimal space-y-1 pl-4 text-[var(--ink-muted)]">
+            <li>
+              用全平台<strong>平均评分</strong>、<strong>平均收藏数</strong>先合成「需求热度」代理（约 50～92），与上面「需求热度」卡片同源。
+            </li>
+            <li>
+              再按公式把四部分相加后平移、截断：评分贡献 + 收藏贡献 + 需求热度相对 55 的微调 + 房源规模贡献（房源越多上限越高，最多按约 800
+              套封顶），最后整体限制在约 5～26。
+            </li>
+          </ol>
+          <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+            适用于对比「当前样本整体是否更热、更活跃」，不能当作订单收入或投资决策依据。
+          </p>
+        </div>
+      ),
     },
   ];
 
@@ -524,9 +598,9 @@ const Home: React.FC = () => {
                       <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--ink-muted)] sm:text-xs">
                         {stat.label}
                       </span>
-                      <Tooltip title={stat.tooltip} placement="top">
+                      <ZenRichTooltip title={stat.tooltip} placement="top">
                         <QuestionCircleOutlined className="cursor-help text-[10px] text-[var(--paper-gray)] hover:text-[var(--ink-muted)]" />
-                      </Tooltip>
+                      </ZenRichTooltip>
                     </div>
                     <div className="flex items-baseline gap-1">
                       <span className="font-[var(--font-serif)] text-xl font-semibold text-[var(--ink-black)] sm:text-2xl">
@@ -557,9 +631,9 @@ const Home: React.FC = () => {
                       <div className="h-4 w-1 shrink-0 rounded-full bg-[var(--ochre)]" />
                       <Text className="text-xs font-medium uppercase tracking-[0.15em] text-[var(--ink-muted)]">热门商圈</Text>
                     </div>
-                    <Link to="/analysis">
+                    <Link to="/dashboard?tab=districts">
                       <Button type="text" size="small" className="!text-[var(--ochre)] hover:!bg-[var(--ochre-pale)] shrink-0">
-                        分析 <ArrowRightOutlined />
+                        名录 <ArrowRightOutlined />
                       </Button>
                     </Link>
                   </div>

@@ -183,15 +183,16 @@ const ListingDetail: React.FC = () => {
 
   const tags = parseTags(listing.house_tags);
   const currentMainSrc = mainImages[activeImageIndex] ?? mainImages[0];
+  const showPrice = listing.display_price ?? listing.final_price;
 
   const priceBlock = (
     <div className="flex flex-wrap items-baseline gap-2">
       <span className="text-3xl sm:text-4xl font-[var(--font-serif)] font-semibold text-[var(--ochre)]">
-        ¥{listing.final_price}
+        ¥{showPrice}
       </span>
       {listing.original_price != null &&
         listing.discount_rate != null &&
-        listing.original_price > listing.final_price && (
+        listing.original_price > showPrice && (
         <>
           <span className="text-base sm:text-lg text-[var(--ink-muted)] line-through">¥{listing.original_price}</span>
           <Tag className="!bg-[var(--ochre)] !text-white !border-none">

@@ -3,7 +3,6 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import OnboardingModal from '../components/OnboardingModal';
 import {
-  PieChartOutlined,
   DesktopOutlined,
   HeatMapOutlined,
   ExperimentOutlined,
@@ -59,7 +58,6 @@ const MainLayout: React.FC = () => {
     { key: '/dashboard', icon: <DesktopOutlined />, label: '经营驾驶舱', path: '/dashboard' },
     { key: '/listings', icon: <AppstoreOutlined />, label: '房源列表', path: '/listings' },
     { key: '/my-listings', icon: <PlusCircleOutlined />, label: '我的房源', path: '/my-listings' },
-    { key: '/analysis', icon: <PieChartOutlined />, label: '商圈分析', path: '/analysis' },
     { key: '/competitor', icon: <CompassOutlined />, label: '竞品情报', path: '/competitor' },
     { key: '/prediction', icon: <ExperimentOutlined />, label: '智能定价', path: '/prediction' },
     { key: '/recommendation', icon: <HeatMapOutlined />, label: '个性化推荐', path: '/recommendation' },
@@ -93,12 +91,12 @@ const MainLayout: React.FC = () => {
       '/dashboard': '经营驾驶舱',
       '/listings': '房源列表',
       '/my-listings': '我的房源',
-      '/analysis': '商圈分析',
       '/competitor': '竞品情报',
       '/prediction': '智能定价预测',
       '/recommendation': '个性化推荐',
       '/favorites': '我的收藏',
-      '/api-test': '接口测试',
+      '/investment': '投资分析',
+      '/opportunities': '投资分析',
       '/profile': '个人信息',
     };
 

@@ -323,9 +323,10 @@ const Listings: React.FC = () => {
                                 <div className="flex items-end justify-between gap-2">
                                   <div className="flex flex-wrap items-baseline gap-1">
                                     <span className="text-xl font-semibold text-[var(--ochre)]" style={{ fontFamily: 'var(--font-serif)' }}>
-                                      ¥{item.final_price}
+                                      ¥{item.display_price ?? item.final_price}
                                     </span>
-                                    {item.original_price > item.final_price && (
+                                    {item.original_price != null &&
+                                      item.original_price > (item.display_price ?? item.final_price) && (
                                       <span className="text-xs text-[var(--ink-muted)] line-through">¥{item.original_price}</span>
                                     )}
                                   </div>

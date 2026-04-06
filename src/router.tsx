@@ -1,5 +1,5 @@
 import { Suspense, type ReactNode } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { Spin } from 'antd';
 import MainLayout from './layout/MainLayout';
 import { AuthProvider } from './context/AuthContext';
@@ -16,7 +16,6 @@ const PageFallback = () => (
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const Home = lazyWithRetry(() => import('./pages/Home'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
-const Analysis = lazyWithRetry(() => import('./pages/Analysis'));
 const Prediction = lazyWithRetry(() => import('./pages/Prediction'));
 const Recommendation = lazyWithRetry(() => import('./pages/Recommendation'));
 const Competitor = lazyWithRetry(() => import('./pages/Competitor'));
@@ -24,7 +23,6 @@ const Favorites = lazyWithRetry(() => import('./pages/Favorites'));
 const ListingDetail = lazyWithRetry(() => import('./pages/ListingDetail'));
 const Listings = lazyWithRetry(() => import('./pages/Listings'));
 const MyListings = lazyWithRetry(() => import('./pages/MyListings'));
-const ApiTest = lazyWithRetry(() => import('./pages/ApiTest'));
 const Investment = lazyWithRetry(() => import('./pages/Investment'));
 const Comparison = lazyWithRetry(() => import('./pages/Comparison'));
 const Opportunities = lazyWithRetry(() => import('./pages/Opportunities'));
@@ -68,7 +66,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'analysis',
-            element: withSuspense(<Analysis />),
+            element: <Navigate to="/dashboard?tab=districts" replace />,
           },
           {
             path: 'prediction',
@@ -97,10 +95,6 @@ export const router = createBrowserRouter([
           {
             path: 'favorites',
             element: withSuspense(<Favorites />),
-          },
-          {
-            path: 'api-test',
-            element: withSuspense(<ApiTest />),
           },
           {
             path: 'investment',

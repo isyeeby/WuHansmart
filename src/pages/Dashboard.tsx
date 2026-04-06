@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
-import { Card, Col, Row, Typography, Spin, Alert, Tooltip } from 'antd';
+import { Card, Col, Row, Typography, Spin, Alert, Tabs } from 'antd';
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
@@ -13,16 +14,47 @@ import {
   QuestionCircleOutlined,
 } from '@ant-design/icons';
 import { PageHeader } from '../components/common';
+import { ZenRichTooltip } from '../components/zen/ZenRichTooltip';
 import { ZenPanel, ZenSection } from '../components/zen/ZenPageBlocks';
 import { ZEN_COLORS, createBarOption, createLineOption } from '../utils/echartsTheme';
-import { getDistricts, getPriceDistribution, type DistrictStats, type PriceDistribution } from '../services/analysisApi';
+import {
+  getDistricts,
+  getPriceDistribution,
+  getFacilityPremium,
+  type DistrictStats,
+  type PriceDistribution,
+  type FacilityPremium,
+} from '../services/analysisApi';
 import { getKpiDashboard, getHeatmapData, getTopDistricts, getDashboardTrends, getDashboardAlerts, type KpiData, type HeatmapPoint, type TopDistrict, type TrendData, type AlertItem } from '../services/dashboardApi';
+import { DashboardDistrictsPanel, DashboardFacilitiesPanel } from '../components/dashboard/DashboardMarketAnalysis';
 
 const { Text } = Typography;
 
-/** 与后端 /api/dashboard/heatmap、/top-districts 的「热度」口径一致（展示分 20～100） */
-const DASHBOARD_HEAT_TOOLTIP =
-  '热度展示分（20～100）：按「行政区+商圈」聚合。先算 raw = ln(1+房源数)×14 + 评分×9 + ln(1+均收藏)×5；再按 raw 全局排名映射——第 1 名 100，每降一名减 1，最低 20（避免 min–max 在「多数很热、少数极冷」时几乎全显示 100）。排序：raw 降序，并列看房源数与名称；条形图与榜单同源；条形图最多 16 条，榜单默认 10 条。';
+const DASHBOARD_TAB_KEYS = new Set(['overview', 'districts', 'facilities']);
+
+type DashboardTabKey = 'overview' | 'districts' | 'facilities';
+
+function normalizeDashboardTab(raw: string | null): DashboardTabKey {
+  if (raw && DASHBOARD_TAB_KEYS.has(raw)) return raw as DashboardTabKey;
+  return 'overview';
+}
+
+/** 热力图/热门商圈「热度」分：面向用户的说明（与后台排名映射一致） */
+const DASHBOARD_HEAT_TOOLTIP_USER = (
+  <div className="max-w-[300px] text-xs leading-relaxed">
+    <p className="mb-2 text-[var(--ink-black)]">
+      每个<strong>行政区 + 商圈</strong>会有一个 <strong>20～100</strong> 的「热度展示分」，方便一眼比较哪里更「热闹」。
+    </p>
+    <p className="mb-1 font-medium text-[var(--ink-black)]">大致会看什么：</p>
+    <ul className="mb-2 list-disc space-y-1 pl-4 text-[var(--ink-muted)]">
+      <li>这一片<strong>房源多不多</strong>、<strong>评分高不高</strong>、大家<strong>收藏多不多</strong>（都做了平滑，避免特大商圈垄断）。</li>
+      <li>所有商圈按综合强弱<strong>排个名次</strong>：排第一的给 100 分，往后每名略减，最低不低于 20，所以不会出现「几乎全是 100」看不懂的情况。</li>
+    </ul>
+    <p className="m-0 text-[11px] text-[var(--ink-muted)]">
+      条形图与右侧列表用同一套分；图上条数与列表条数上限可能不同，以各自标题为准。
+    </p>
+  </div>
+);
 
 // 禅意统计卡片
 const StatCard: React.FC<{
@@ -32,8 +64,10 @@ const StatCard: React.FC<{
   trend?: number;
   icon: React.ReactNode;
   description?: string;
+  /** 标题旁问号，长说明给最终用户看 */
+  titleTooltip?: React.ReactNode;
   color?: string;
-}> = ({ title, value, suffix, trend, icon, description, color = ZEN_COLORS.jade }) => (
+}> = ({ title, value, suffix, trend, icon, description, titleTooltip, color = ZEN_COLORS.jade }) => (
   <Card
     bordered={false}
     className="group h-full !rounded-xl !border !border-[var(--paper-warm)] !bg-white/90 !shadow-[var(--shadow-soft)] transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:!shadow-[var(--shadow-medium)]"
@@ -41,7 +75,14 @@ const StatCard: React.FC<{
   >
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
-        <Text className="text-[10px] font-medium uppercase tracking-wider text-[var(--ink-muted)] sm:text-xs">{title}</Text>
+        <div className="flex items-center gap-1">
+          <Text className="text-[10px] font-medium uppercase tracking-wider text-[var(--ink-muted)] sm:text-xs">{title}</Text>
+          {titleTooltip && (
+            <ZenRichTooltip title={titleTooltip} placement="top">
+              <QuestionCircleOutlined className="cursor-help text-[10px] text-[var(--paper-gray)] hover:text-[var(--ink-muted)]" />
+            </ZenRichTooltip>
+          )}
+        </div>
         <div className="mt-2">
           <span
             className="text-2xl font-semibold tracking-tight text-[var(--ink-black)] sm:text-3xl"
@@ -57,7 +98,7 @@ const StatCard: React.FC<{
           >
             {trend >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
             <span>{Math.abs(trend)}%</span>
-            <span className="text-[var(--ink-muted)]">较上月同期</span>
+            <span className="text-[var(--ink-muted)]">环比（日历价）</span>
           </div>
         )}
         {description && <p className="mt-2 text-xs leading-relaxed text-[var(--ink-muted)]">{description}</p>}
@@ -73,10 +114,17 @@ const StatCard: React.FC<{
 );
 
 const Dashboard: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = useMemo(() => normalizeDashboardTab(searchParams.get('tab')), [searchParams]);
+
   const [loading, setLoading] = useState(true);
   const [districtStats, setDistrictStats] = useState<DistrictStats[]>([]);
   const [priceDistribution, setPriceDistribution] = useState<PriceDistribution[]>([]);
-  
+
+  const [facilityData, setFacilityData] = useState<FacilityPremium[]>([]);
+  const [facilityLoading, setFacilityLoading] = useState(false);
+  const facilityFetchedRef = useRef(false);
+
   // Dashboard API 数据 - 使用新接口 (KPI、热力图、热门商圈)
   const [kpiData, setKpiData] = useState<KpiData | null>(null);
   const [topDistricts, setTopDistricts] = useState<TopDistrict[]>([]);
@@ -84,9 +132,37 @@ const Dashboard: React.FC = () => {
   const [trendsData, setTrendsData] = useState<TrendData | null>(null);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
 
+  const loadFacilityPremium = useCallback(async () => {
+    try {
+      setFacilityLoading(true);
+      const response = await getFacilityPremium();
+      setFacilityData(response?.facilities || []);
+    } catch (error) {
+      console.error('获取设施溢价数据失败:', error);
+      setFacilityData([]);
+    } finally {
+      setFacilityLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    const raw = searchParams.get('tab');
+    if (raw && !DASHBOARD_TAB_KEYS.has(raw)) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (activeTab !== 'facilities') return;
+    if (facilityFetchedRef.current) return;
+    facilityFetchedRef.current = true;
+    void loadFacilityPremium();
+  }, [loading, activeTab, loadFacilityPremium]);
 
   const fetchDashboardData = async () => {
     try {
@@ -114,6 +190,19 @@ const Dashboard: React.FC = () => {
       console.error('获取驾驶舱数据失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleMainTabChange = (key: string) => {
+    const k = normalizeDashboardTab(key);
+    if (k === 'overview') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: k }, { replace: true });
+    }
+    if (k === 'facilities' && !facilityFetchedRef.current) {
+      facilityFetchedRef.current = true;
+      void loadFacilityPremium();
     }
   };
 
@@ -276,15 +365,8 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  return (
-    <div className="dashboard-shell space-y-12 pb-10 sm:space-y-14">
-      <PageHeader
-        title="经营驾驶舱"
-        subtitle="实时监控武汉市民宿市场核心指标，洞察价格趋势与商圈热度"
-        category="Dashboard"
-        extra={<Text className="text-sm text-[var(--ink-muted)]">数据更新时间: {new Date().toLocaleDateString('zh-CN')}</Text>}
-      />
-
+  const overviewTabContent = (
+    <>
       {/* KPI：宣纸底条带，四格均分 */}
       <div className="paper-texture rounded-xl border border-[var(--paper-warm)] px-4 py-6 shadow-[var(--shadow-soft)] sm:px-6 sm:py-8">
         <Row gutter={[16, 16]}>
@@ -293,7 +375,15 @@ const Dashboard: React.FC = () => {
               title="在售房源总数"
               value={kpiData?.total_listings?.toLocaleString() || '-'}
               icon={<HomeOutlined />}
-              description="平台当前可预订房源"
+              description="库内在架样本总量"
+              titleTooltip={
+                <div className="max-w-[300px] text-xs leading-relaxed">
+                  <p className="mb-2 text-[var(--ink-black)]">
+                    当前数据库里收录的<strong>民宿条数</strong>，是本页均价、热度、趋势等指标的统计基础。
+                  </p>
+                  <p className="m-0 text-[11px] text-[var(--ink-muted)]">随导入/爬虫更新变化；不是订单笔数。</p>
+                </div>
+              }
               color={ZEN_COLORS.jade}
             />
           </Col>
@@ -304,7 +394,18 @@ const Dashboard: React.FC = () => {
               suffix="元"
               trend={kpiData?.price_change_percent || 0}
               icon={<DollarOutlined />}
-              description="挂牌均价；趋势为本月与上月同期对比"
+              description="当前挂牌价截面平均；旁为日历价环比"
+              titleTooltip={
+                <div className="max-w-[300px] text-xs leading-relaxed">
+                  <p className="mb-2 text-[var(--ink-black)]">
+                    <strong>大数字</strong>：全库房源<strong>展示日价</strong>的简单平均，粗看整体价格带；<strong>不是</strong>成交价、也<strong>不是</strong>「今日」专属均价。
+                  </p>
+                  <p className="mb-1 text-[var(--ink-muted)]">
+                    <strong>下方涨跌</strong>：来自价格日历——优先「本月至今 vs 上月同期」的日均价对比；若上月头几天没有日历，会用「最近14天 vs 再前14天」等回退；无日历则为 0。
+                  </p>
+                  <p className="m-0 text-[11px] text-[var(--ink-muted)]">与曲线图同为日历口径时，方向应大致一致。</p>
+                </div>
+              }
               color={ZEN_COLORS.ochre}
             />
           </Col>
@@ -314,7 +415,18 @@ const Dashboard: React.FC = () => {
               value={kpiData?.occupancy_rate?.toFixed(1) || '-'}
               suffix="%"
               icon={<StarOutlined />}
-              description="基于评分与收藏的代理指标，非真实入住率"
+              description="关注度代理 · 非真实入住率"
+              titleTooltip={
+                <div className="max-w-[300px] text-xs leading-relaxed">
+                  <p className="mb-2 text-[var(--ink-black)]">
+                    <strong>关注度代理指数</strong>（约 50～92），「%」仅为样式，<strong>不是</strong> PMS 入住率。
+                  </p>
+                  <p className="mb-1 text-[var(--ink-muted)]">
+                    用全平台<strong>平均评分</strong>、<strong>平均收藏</strong>合成：评分高、收藏多则偏高，并限制在合理区间便于对比。
+                  </p>
+                  <p className="m-0 text-[11px] text-[var(--ink-muted)]">首页「市场吸引力」会复用同一思路下的热度信息。</p>
+                </div>
+              }
               color={ZEN_COLORS.gold}
             />
           </Col>
@@ -324,7 +436,15 @@ const Dashboard: React.FC = () => {
               value={kpiData?.district_count || '-'}
               suffix="个"
               icon={<ShopOutlined />}
-              description="覆盖行政区数量"
+              description="有房源的行政区数"
+              titleTooltip={
+                <div className="max-w-[300px] text-xs leading-relaxed">
+                  <p className="mb-2 text-[var(--ink-black)]">
+                    当前样本里出现过房源的<strong>行政区（district）种类数</strong>，表示地理覆盖广度。
+                  </p>
+                  <p className="m-0 text-[11px] text-[var(--ink-muted)]">不表示每区房源同样多；细分商圈请看下方图表与列表。</p>
+                </div>
+              }
               color={ZEN_COLORS.jade}
             />
           </Col>
@@ -360,9 +480,9 @@ const Dashboard: React.FC = () => {
               titleCaps={false}
               title="核心商圈热度（条形图）"
               extra={
-                <Tooltip title={DASHBOARD_HEAT_TOOLTIP} placement="left">
+                <ZenRichTooltip title={DASHBOARD_HEAT_TOOLTIP_USER} placement="left">
                   <QuestionCircleOutlined className="cursor-help text-[var(--ink-muted)]" aria-label="热度定义" />
-                </Tooltip>
+                </ZenRichTooltip>
               }
             >
               <ReactECharts option={heatmapOption} style={{ height: heatChartHeight }} />
@@ -385,9 +505,19 @@ const Dashboard: React.FC = () => {
               titleCaps={false}
               title="热门商圈榜单"
               extra={
-                <Tooltip title={`${DASHBOARD_HEAT_TOOLTIP} 下列表另含挂牌均价、套数、相对全市均价溢价率。`} placement="left">
+                <ZenRichTooltip
+                  title={
+                    <div className="max-w-[300px] text-xs leading-relaxed">
+                      {DASHBOARD_HEAT_TOOLTIP_USER}
+                      <p className="mt-2 border-t border-[var(--paper-warm)] pt-2 text-[11px] text-[var(--ink-muted)]">
+                        下列表额外展示：挂牌均价、套数、相对全市均价的偏离（便于看溢价/洼地）。
+                      </p>
+                    </div>
+                  }
+                  placement="left"
+                >
                   <QuestionCircleOutlined className="cursor-help text-[var(--ink-muted)]" aria-label="热度与榜单说明" />
-                </Tooltip>
+                </ZenRichTooltip>
               }
             >
               <div className="flex max-h-[min(420px,58vh)] flex-col gap-2 overflow-y-auto pr-1">
@@ -468,6 +598,41 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </Card>
+    </>
+  );
+
+  return (
+    <div className="dashboard-shell space-y-8 pb-10 sm:space-y-10">
+      <PageHeader
+        title="经营驾驶舱"
+        subtitle="市场总览、商圈名录与设施溢价同一入口；总览看 KPI 与趋势，后两页做下钻与结构分析"
+        category="Dashboard"
+        extra={<Text className="text-sm text-[var(--ink-muted)]">数据更新时间: {new Date().toLocaleDateString('zh-CN')}</Text>}
+      />
+
+      <Tabs
+        activeKey={activeTab}
+        onChange={handleMainTabChange}
+        destroyInactiveTabPane={false}
+        className="dashboard-main-tabs [&_.ant-tabs-nav]:mb-6 [&_.ant-tabs-nav::before]:border-[var(--paper-warm)] [&_.ant-tabs-tab]:text-[var(--ink-muted)] [&_.ant-tabs-tab-active]:!text-[var(--ink-black)]"
+        items={[
+          {
+            key: 'overview',
+            label: '市场总览',
+            children: <div className="space-y-12 sm:space-y-14">{overviewTabContent}</div>,
+          },
+          {
+            key: 'districts',
+            label: '商圈名录',
+            children: <DashboardDistrictsPanel districtStats={districtStats} />,
+          },
+          {
+            key: 'facilities',
+            label: '设施溢价',
+            children: <DashboardFacilitiesPanel facilityData={facilityData} facilityLoading={facilityLoading} />,
+          },
+        ]}
+      />
     </div>
   );
 };

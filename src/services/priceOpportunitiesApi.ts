@@ -1,5 +1,8 @@
 /**
- * 价格洼地分析 API 服务
+ * 价格洼地分析 API（直连 /api/analysis/*）
+ *
+ * @deprecated 前端「价格洼地」已合并到「投资分析」页；请优先使用 investmentApi.getInvestmentOpportunities（/api/investment/opportunities，同源数据）。
+ * 本文件保留供脚本或对照测试使用。
  */
 import { apiClient } from '../config/api';
 
@@ -9,10 +12,24 @@ export interface PriceOpportunity {
   district: string;
   current_price: number;
   predicted_price: number;
+  /** 参考价 − 挂牌价（元） */
+  price_gap?: number;
   gap_rate: number;
   rating: number;
-  /** xgboost | district_median */
+  /** xgboost_daily | district_median */
   prediction_source?: string;
+}
+
+export interface PriceOpportunitiesMethodology {
+  gap_formula?: string;
+  reference_price?: string;
+  model_call_cap?: number;
+  eligibility_note?: string;
+}
+
+export interface PriceOpportunitiesResponse {
+  items: PriceOpportunity[];
+  methodology: PriceOpportunitiesMethodology;
 }
 
 export interface ROIRanking {
@@ -37,11 +54,18 @@ export interface ROIRanking {
 export const getPriceOpportunities = async (
   minGapRate: number = 20,
   limit: number = 20
-): Promise<PriceOpportunity[]> => {
+): Promise<PriceOpportunitiesResponse> => {
   const response = await apiClient.get('/api/analysis/price-opportunities', {
     params: { min_gap_rate: minGapRate, limit }
   });
-  return response.data;
+  const raw = response.data;
+  if (raw?.items && Array.isArray(raw.items)) {
+    return raw as PriceOpportunitiesResponse;
+  }
+  if (Array.isArray(raw)) {
+    return { items: raw, methodology: {} };
+  }
+  return { items: [], methodology: {} };
 };
 
 /**

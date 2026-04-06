@@ -1,0 +1,1 @@
+import{j as t}from"./vendor-motion-Ct3ThTe2.js";import{N as e}from"./index-WqUG6t23.js";import"./vendor-antd-deiFs6Xt.js";function p(){return t.jsx(e,{to:"/investment?tab=opportunities",replace:!0})}export{p as default};
