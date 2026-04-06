@@ -19,6 +19,7 @@
 | [METRICS_GLOSSARY.md](METRICS_GLOSSARY.md) | 商圈均价/模型价/竞品均价等口径对照 |
 | [HIVE_GUIDE.md](HIVE_GUIDE.md) | ODS→DWD→DWS→ADS、`export_mysql_for_hive`、`hive_docker_import` |
 | [MODULE_AUDIT_AND_SMOKE.md](MODULE_AUDIT_AND_SMOKE.md) | 模块×路由×API、口径风险、E2E/烟测清单 |
+| [UX_API_AUDIT_CHECKLIST.md](UX_API_AUDIT_CHECKLIST.md) | 页面→API→指标口径 审查矩阵（持续勾选） |
 
 ## 接口与产品
 
@@ -26,7 +27,7 @@
 |------|------|
 | [BACKEND_API_SPEC.md](BACKEND_API_SPEC.md) | **前后端共用**接口说明（含首页推荐条与 `/api/recommend` 区分） |
 | [LISTINGS_PERSONALIZED_SORT.md](LISTINGS_PERSONALIZED_SORT.md) | 房源列表 `sort_by=personalized`：**规则区域重排**原理及与推荐接口边界 |
-| [DASHBOARD_API.md](DASHBOARD_API.md) | `/api/dashboard/kpi`、`heatmap`、`top-districts` 等 |
+| [DASHBOARD_API.md](DASHBOARD_API.md) | `/api/dashboard/kpi`、`heatmap`、`top-districts` 等（前端「经营驾驶舱」页还内嵌 **商圈名录/设施溢价** Tab，数据走 `/api/analysis/*`） |
 | [USER_SURVEY_AND_RECOMMENDATION.md](USER_SURVEY_AND_RECOMMENDATION.md) | 问卷落库、`/api/recommend` 补全、`/api/home/recommendations` 重排、前端入口 |
 | [RECOMMENDATION_ONLINE_BEHAVIOR.md](RECOMMENDATION_ONLINE_BEHAVIOR.md) | `/api/recommend` 分支；矩阵/冷启动；与首页、详情相似接口边界 |
 | [PRD.md](PRD.md) | 产品需求 **v2.1**（当前功能与数据口径以代码+本索引为准） |

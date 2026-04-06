@@ -13,7 +13,7 @@
    常见可进一步降低方差、压低 MAE
 
 产物写入 ``models/*_advanced.*`` 与 ``price_model_advanced_bundle.joblib``，
-**不会覆盖** ``xgboost_price_model_latest.pkl`` 及 ``*_latest.*``。
+**独立产物**，与线上日级训练脚本输出文件名互不覆盖。
 
 用法（在 Tujia-backend 目录）::
 

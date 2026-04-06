@@ -8,6 +8,8 @@
 > **口径说明**：推荐能力对外以**内容相似度 + 多条件匹配**为主；离线训练脚本在交互数据充足时可融合行为相似度，论文叙述以 [`THESIS_RECOMMENDATION_SYSTEM.md`](./THESIS_RECOMMENDATION_SYSTEM.md) 为准。**在线**分支与首页推荐条接口以 [`RECOMMENDATION_ONLINE_BEHAVIOR.md`](./RECOMMENDATION_ONLINE_BEHAVIOR.md)、[`USER_SURVEY_AND_RECOMMENDATION.md`](./USER_SURVEY_AND_RECOMMENDATION.md) 为准。
 >
 > **文档索引**：[docs/README.md](./README.md)。开题版长文见 [PRD_THESIS_v1.md](./PRD_THESIS_v1.md)。
+>
+> **信息架构迭代（2026-04）**：原独立「商圈分析」前端路由已并入 **经营驾驶舱**（`/dashboard`）内 Tab（市场总览 / 商圈名录 / 设施溢价）；`/analysis` 重定向至 `/dashboard?tab=districts`。后端接口仍为 **`/api/analysis/*`**。
 
 ---
 
@@ -19,7 +21,7 @@
 ### 1.2 核心AI能力
 | 模型 | 技术实现 | 应用场景 |
 |------|----------|----------|
-| **XGBoost价格预测模型** | XGBoost回归算法，200棵树，最大深度6 | 价格预测、因素分析、智能定价、ROI计算 |
+| **日级 XGBoost 定价模型** | 日历样本 + 静态特征；Booster 回归（参数见训练脚本与环境变量） | 智能定价锚定日、14 天曲线、因子分解、价格机会（配合行政区兜底） |
 | **智能推荐（内容相似度为主）** | 多维房源特征 + SVD 降维 + 余弦相似度；可选融合隐式行为相似度 | 相似房源、条件推荐、登录用户历史扩展、竞争分析 |
 
 ### 1.3 数据基础
@@ -433,49 +435,17 @@ ROI = (年收益预测 - 年运营成本) / 装修投资成本
 
 ## 四、机器学习模型规格
 
-### 4.1 XGBoost价格预测模型
+### 4.1 日级 XGBoost 定价模型
 
-**模型架构**:
-```python
-class PricePredictionModel:
-    def __init__(self):
-        self.model = xgb.XGBRegressor(
-            n_estimators=200,
-            max_depth=6,
-            learning_rate=0.1,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42
-        )
-        self.feature_names = None
-        self.metrics = {}
+**实现要点**（与代码一致）：
 
-    def prepare_features(self, df):
-        """特征工程"""
-        features = {
-            'district_encoded': 区域编码,
-            'bedroom_count': 从title解析的卧室数,
-            'bed_count': 从title解析的床位数,
-            'area_sqm': 从title解析的面积,
-            'has_projector': 投影设施,
-            'has_kitchen': 厨房设施,
-            'has_washing_machine': 洗衣机,
-            'rating': 评分,
-            'comment_count': 评论数,
-            'heat_score': 热度分（评论数/天数）
-        }
-        return features
+- **训练**：`scripts/train_model_daily_mysql.py`；样本为「房源 × 日历日」；目标 `log1p(价格)`；时间切分 train/val/test。
+- **推理**：`app/services/daily_price_service.py` 加载 `xgboost_price_daily_model.pkl` 与 `feature_names_daily.json` 等；`PredictionRequest` → 逐日曲线与锚定日 `base_price`。
+- **特征**：静态房源字段 + 区位编码与聚合统计 + 日期/节假日/horizon（见 `app/ml/daily_calendar_features.py`）。
 
-    def feature_importance(self, top_n=15):
-        """输出特征重要性排序"""
-        importance = self.model.get_booster().get_score(importance_type='gain')
-        return sorted(importance.items(), key=lambda x: x[1], reverse=True)[:top_n]
-```
+**评估指标**（训练日志与 `model_metrics_daily.json`）：
 
-**评估指标**:
-- RMSE（均方根误差）
-- MAE（平均绝对误差）
-- R² Score（决定系数）
+- MAE、RMSE、R²、MAPE（原始价格尺度）
 
 ---
 
@@ -889,26 +859,14 @@ class ContentSimilarityRecommender:  # 示例类名；实现见 app/services/rec
 
 ### 附录A: 机器学习模型调用示例
 
-**XGBoost价格预测调用**:
+**日级定价调用（服务内已封装，以下为概念对齐）**:
 ```python
-# 初始化模型
-from model_xgboost import PricePredictionModel
-model = PricePredictionModel()
-model.load('models/xgboost_price_model.pkl')
+from app.services.daily_price_service import daily_forecast_service
+from app.models.schemas import PredictionRequest
 
-# 预测
-features = {
-    'district_encoded': 5,      # 朝阳区
-    'bedroom_count': 2,
-    'bed_count': 2,
-    'area_sqm': 65,
-    'has_projector': 1,
-    'has_kitchen': 1,
-    'rating': 4.8,
-    'heat_score': 0.85
-}
-predicted_price = model.predict(features)
-# 输出: 328.5
+req = PredictionRequest(district="武昌区", trade_area="武昌区", room_type="整套", ...)
+out = daily_forecast_service.predict_forecast_14(req, n_days=14)
+# out["base_price"], out["forecasts"]
 ```
 
 **相似度推荐调用（示例，以仓库实现为准）**:

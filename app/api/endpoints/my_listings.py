@@ -11,6 +11,7 @@ from typing import Any, List, Optional
 from app.models import schemas
 from app.db.database import get_db, get_user_by_username
 from app.core.security import get_current_user_id
+from app.services.competitor_similarity import compute_my_listing_similarity
 
 router = APIRouter(tags=["我的房源"])
 
@@ -342,10 +343,7 @@ async def get_competitors(
     competitor_items = []
     for c in competitors:
         cp = float(c.final_price) if c.final_price else 0.0
-        if my_price > 0 and cp > 0:
-            sim = max(0.0, min(100.0, 100.0 - abs(cp - my_price) / my_price * 100.0))
-        else:
-            sim = 50.0
+        sim = compute_my_listing_similarity(my_listing, c)
         tl = _house_tags_to_list(c.house_tags)
         dist_km = None
         if my_geo and _coords_valid(c.latitude, c.longitude):
@@ -369,7 +367,14 @@ async def get_competitors(
                 distance_km=dist_km,
             )
         )
-    
+
+    competitor_items.sort(
+        key=lambda x: (
+            -x.similarity_score,
+            x.distance_km if x.distance_km is not None else float("inf"),
+        )
+    )
+
     # 计算市场定位
     competitor_prices = [float(c.final_price or 0) for c in competitors if c.final_price]
     all_prices = competitor_prices + [my_price]
@@ -417,6 +422,11 @@ async def get_competitors(
             "total_competitors": len(competitors),
             "geo_ranking_used": geo_ranking_used,
             "selection_note": selection_note,
+            "price_percentile_methodology": (
+                "将「我的房源」current_price 与同批竞品 final_price 合并排序；"
+                "my_price_rank 为从低到高名次；price_percentile = rank / 总数 × 100。"
+                " 与 GET /api/predict/competitors/{unit_id} 的选池（同区按收藏）与相似度算法不同，勿横向对比。"
+            ),
         },
         competitors=competitor_items,
         analysis=_build_comparison_analysis(my_price, avg_price, competitor_prices),
@@ -556,11 +566,10 @@ async def get_price_suggestion(
     获取定价建议
 
     优先使用日级 XGBoost 的 **base_price**（与「智能定价」页「模型基准价」一致：锚定首日建议价）；
-    若日级不可用则回退房源级 XGBoost 单点；再失败则回退行政区样本均价。
+    若日级不可用则回退同行政区样本挂牌均价；再失败则建议价暂等于当前价。
     """
     from app.db.database import get_my_listing_by_id, Listing
     from app.services.daily_price_service import daily_forecast_service
-    from app.services.price_predictor import model_service
 
     uid = _resolve_db_user_id(db, current_user_id)
     my_listing = get_my_listing_by_id(db, listing_id, uid)
@@ -579,17 +588,10 @@ async def get_price_suggestion(
             suggested_price = float(daily_out["base_price"])
 
     if suggested_price is None:
-        try:
-            suggested_price = float(model_service.predict(pred_req))
-            reasoning.append("日级模型不可用，已改用房源级 XGBoost 单点预测")
-        except Exception:
-            suggested_price = None
-
-    if suggested_price is None:
         competitors = db.query(Listing).filter(Listing.district == my_listing.district).limit(50).all()
         if competitors:
             suggested_price = sum(float(c.final_price or 0) for c in competitors) / len(competitors)
-            reasoning.append("模型不可用，基于同行政区样本挂牌均价估算")
+            reasoning.append("日级模型不可用，基于同行政区样本挂牌均价估算")
         else:
             suggested_price = current_price
             reasoning.append("缺少可比数据，建议价暂等于当前价")

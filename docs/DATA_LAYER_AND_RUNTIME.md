@@ -51,7 +51,7 @@ Hive（清洗/分析/训练） ──导数脚本──► MySQL ──► FastA
 
 - [ ] `DATABASE_URL` 指向可写 MySQL，`init_db` 或迁移已执行  
 - [ ] 已执行导数脚本，`listings` 有业务数据  
-- [ ] `MODEL_PATH` / `RECOMMENDER_PATH` 指向存在文件  
+- [ ] 日级定价产物（`xgboost_price_daily_model.pkl` 等）与推荐矩阵（`listing_similarity_*.npz`）已部署；`MODEL_PATH` / `RECOMMENDER_PATH` 与运维约定一致  
 - [ ] `HIVE_ANALYTICS_PRIMARY=false`（线上）  
 - [ ] `SECRET_KEY` 已更换；`DEBUG=false`  
 - [ ] `CORS_ORIGINS` 配置为前端域名（勿用 `*` + credentials）
@@ -89,7 +89,7 @@ Hive（清洗/分析/训练） ──导数脚本──► MySQL ──► FastA
 - **收藏 / 用户**：`Favorite` ORM 与 `folder_name`、价格提醒字段对齐；`User.email` 可选；`/api/my-listings` 按登录用户落库与查询。
 - **热力图**：`/api/dashboard/heatmap` 在无经纬度时返回行政区哈希占位点并附 `series_note`。
 - **KPI**：`occupancy_rate`、`avg_roi` 在接口中附 `kpi_definitions` 说明启发式口径；价格环比来自价格日历。
-- **预测 `/trend`**：响应含 `data_kind` 与 `methodology`，标明示意序列；定价建议置信度改为与价差相关的确定性启发式。
+- **日趋势**：`/api/predict/trend` 已移除；平台趋势用 `/api/dashboard/trends`。
 - **首页**：`/api/home/*` 响应可含 `data_source`（`live` / `mysql` / `hive` / `demo_fallback` / `empty`），便于区分真实数据与演示兜底。
 - **前端**：`favoritesApi` 与 `/api/user/me/*` 路径对齐；`analysisApi` 已移除无后端路由的「兼容」函数；首页/投资/对比/因子分析页补充口径说明。
 

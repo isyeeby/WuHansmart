@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     HIVE_HEALTH_REQUIRED: bool = False
 
     # Model Settings
-    MODEL_PATH: str = "models/xgboost_price_model_latest.pkl"
+    # 日级定价模型主文件（供运维/文档对齐；推理由 DailyPriceForecastService 按路径加载）
+    MODEL_PATH: str = "models/xgboost_price_daily_model.pkl"
     RECOMMENDER_PATH: str = "models/listing_similarity_latest.npz"
 
     # Data Import Settings

@@ -9,4 +9,4 @@
 | 竞品样本均价 | `/api/my-listings/.../competitors` | 本次选取的**竞品列表**的 `final_price` 均值，非全市均价。 |
 | 入住率 / 平台 ROI（KPI） | `/api/dashboard/kpi` | **启发式展示指数**，非订单口径；见响应 `kpi_definitions`。 |
 | 首页热门商圈 / 热力图 | `/api/home/hot-districts`、`/heatmap` | 优先 Hive ODS（若可连）；失败或空则用 MySQL 聚合；仍无数据时见 `data_source=demo_fallback`。 |
-| 模型合理价 | 智能定价、竞争力 | XGBoost 等对特征向量的估算，与「商圈均价」不同维度，不可混读为同一指标。 |
+| 模型合理价 | 智能定价、竞争力 | 日级 XGBoost 对锚定日的估算，与「商圈均价」不同维度，不可混读为同一指标。 |

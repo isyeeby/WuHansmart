@@ -39,12 +39,22 @@ class ListingResponse(ListingBase):
 class ListingListItem(ListingBase):
     """房源列表项（不含详情页大三块 JSON，减轻列表 payload）"""
 
+    display_price: Optional[float] = Field(
+        default=None,
+        description="列表卡片展示价：当日 price_calendars 有有效价则用之，否则同 final_price",
+    )
+
     class Config:
         from_attributes = True
 
 
 class ListingDetailResponse(ListingBase):
     """房源详情（含 dynamicModule 三模块解析结果）"""
+
+    display_price: Optional[float] = Field(
+        default=None,
+        description="详情页主展示价：当日 price_calendars 有有效价则用之，否则同 final_price",
+    )
     facility_module: Optional[Dict[str, Any]] = None
     comment_module: Optional[Dict[str, Any]] = None
     landlord_module: Optional[Dict[str, Any]] = None
@@ -108,7 +118,10 @@ class ListingSimilarResponse(BaseModel):
     district: str
     final_price: float
     rating: float
-    similarity_score: float
+    similarity_score: float = Field(
+        ...,
+        description="与当前房源 final_price 的相对价差相似度：100×(1−min(1,|Δ|/参考价))，参考价为当前房源价（≤0 时用 1 避免除零）",
+    )
     cover_image: Optional[str] = None
 
 
@@ -430,7 +443,7 @@ class PredictionResponse(BaseModel):
     suggestion: Optional[str]
     prediction_model: Optional[str] = Field(
         default=None,
-        description="xgboost_daily=日级锚定日基准价；xgboost_listing=房源级单点（日级不可用时的回退）",
+        description="定价成功时为 xgboost_daily（日级锚定日基准价）；未部署日级模型时接口返回 503",
     )
 
 class UserBase(BaseModel):

@@ -34,7 +34,6 @@ def _assert_not_server_error(resp):
         "/api/tags/categories",
         "/api/recommend",
         "/api/predict/district-trade-areas",
-        "/api/predict/trend?district=洪山区&days=14",
         "/api/predict/feature-importance",
         "/api/analysis/districts",
         "/api/analysis/facility-premium",
@@ -52,6 +51,7 @@ def test_geocode_forward_query(client: TestClient):
 
 
 def test_predict_price_post(client: TestClient):
+    """日级模型未部署时返回 503；部署完整日级产物后为 200。"""
     r = client.post(
         "/api/predict/price",
         json={
@@ -63,7 +63,7 @@ def test_predict_price_post(client: TestClient):
             "capacity": 4,
         },
     )
-    _assert_not_server_error(r)
+    assert r.status_code in (200, 503), (r.status_code, r.text[:500])
 
 
 def test_investment_calculate_post(client: TestClient):

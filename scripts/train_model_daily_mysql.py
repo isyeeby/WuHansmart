@@ -11,7 +11,7 @@
   - `global`（默认）：全局唯一日期轴 70% / 15% / 15% → train/val/test；
   - `per_unit`：每套房源各自按日期 70/15/15，再合并（短于 `--per-unit-min-days` 的房源丢弃）。
 
-产物（不覆盖房源级 models/*_latest*）：
+产物（写入 models/，与日级文件名一致）：
   models/xgboost_price_daily_model.pkl
   models/xgboost_price_daily_q020.pkl / q050 / q080（分位数区间，可用 --skip-quantiles 跳过）
   models/feature_names_daily.json
@@ -605,7 +605,7 @@ def save_daily_artifacts(
         json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
 
     print("\n" + "=" * 60)
-    print("已保存日级模型与元数据（未覆盖 xgboost_price_model_latest.pkl）")
+    print("已保存日级模型与元数据")
     print("=" * 60)
     print(f"  {DAILY_MODEL_PATH}")
     print(f"  {DAILY_FEATURE_JSON}")

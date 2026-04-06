@@ -3,9 +3,12 @@
 """
 from typing import List, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Query, HTTPException, status
+from fastapi import APIRouter, Query, HTTPException, status, Depends
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
 from app.services.district_ranking_service import DISTRICT_ROI_RANKING_FIELD_GLOSSARY
-from app.services.hive_service import hive_service
+from app.services.price_opportunity_scan import compute_price_opportunities
 
 router = APIRouter()
 
@@ -301,7 +304,19 @@ def get_investment_ranking(
 
 @router.get("/opportunities")
 def get_investment_opportunities(
-    min_roi: float = Query(10.0, description="最小收益率"),
+    min_roi: float = Query(10.0, description="最小示意指标(%)，与价差同尺度，非购房年化 ROI"),
+    min_gap_rate: float = Query(
+        20.0,
+        description="最小价差率(%)，与 /api/analysis/price-opportunities 一致",
+        ge=5,
+        le=50,
+    ),
+    limit: int = Query(
+        50,
+        description="从同源扫描中取前 N 条再过滤",
+        ge=1,
+        le=100,
+    ),
     max_budget: Optional[float] = Query(
         None,
         description=(
@@ -309,32 +324,24 @@ def get_investment_opportunities(
             "非购房总价，与简化收益口径一致"
         ),
     ),
+    db: Session = Depends(get_db),
 ):
     """
-    投资机会推荐
-    返回符合收益率要求的房源
+    投资机会推荐：与「分析-价格洼地」同源——日级 XGBoost 参考价，失败则行政区 eligible 挂牌中位数。
 
-    数据来源：
-    - 当前价格：平台真实挂牌价
-    - 预测价格：XGBoost模型预测价或行政区中位数
-    - 预估年化收益：基于日租金×20天入住的简化估算
+    uplift_proxy_pct（原 estimated_annual_roi 字段名保留）：(价差×20×12)/(挂牌×20×12+1)×100，与价差率同量级，非真实投资收益。
     """
-    opportunities = hive_service.get_price_opportunities(min_gap_rate=20, limit=20)
+    opportunities = compute_price_opportunities(db, min_gap_rate=min_gap_rate, limit=limit)
 
-    # 使用hive_service已经计算好的ROI数据
     for opp in opportunities:
-        # 如果hive_service已经计算了ROI，直接使用
-        if 'estimated_annual_roi' not in opp:
-            current_price = opp.get('current_price', 0)
-            # 更合理的ROI估算：月收入 = 日租金 * 20天入住，年化收益 = 月收入 * 12 / (日租金 * 100) * 100
-            estimated_monthly_revenue = current_price * 20
-            estimated_annual_roi = (estimated_monthly_revenue * 12) / (current_price * 100 + 1) * 100 if current_price > 0 else 0
-            opp['estimated_annual_roi'] = round(estimated_annual_roi, 2)
-        if 'investment_score' not in opp:
-            opp['investment_score'] = min(100, max(0, int(opp.get('estimated_annual_roi', 0) * 2)))
+        cp = float(opp.get("current_price") or 0)
+        pred = float(opp.get("predicted_price") or 0)
+        gap = pred - cp
+        denom = cp * 20 * 12 + 1
+        opp["estimated_annual_roi"] = round((gap * 20 * 12) / denom * 100, 2) if cp > 0 else 0.0
+        opp["investment_score"] = min(100, max(0, int(50 + float(opp.get("gap_rate") or 0))))
 
-    # 过滤
-    filtered = [o for o in opportunities if o.get('estimated_annual_roi', 0) >= min_roi]
+    filtered = [o for o in opportunities if o.get("estimated_annual_roi", 0) >= min_roi]
 
     if max_budget is not None and max_budget > 0:
         cap_yuan = max_budget * 10_000
@@ -345,21 +352,21 @@ def get_investment_opportunities(
         ]
 
     assumptions = [
-        "每月按20天入住计算",
-        "未考虑运营成本",
-        "投资成本按日租金×100估算",
+        "参考价：优先日级 XGBoost，失败为同行政区 eligible 挂牌中位数（与 /api/analysis/price-opportunities 一致）",
+        "uplift_proxy_pct：假设每月有效出租 20 天，将价差映射为与挂牌年毛收入的比例示意，非购房 ROI",
+        "未扣运营成本与税费",
     ]
     if max_budget is not None and max_budget > 0:
         assumptions.append(
-            f"max_budget={max_budget} 万元：按「日挂牌价×20×12 ≤ 预算×10000 元」过滤年化毛收入尺度，非购房总价。"
+            f"max_budget={max_budget} 万元：按「日挂牌价×20×12 ≤ 预算×10000 元」过滤毛收入尺度，非购房总价。"
         )
 
     return {
-        "data": sorted(filtered, key=lambda x: x.get('estimated_annual_roi', 0), reverse=True),
-        "data_source_note": "价格洼地基于XGBoost模型预测价与实际挂牌价的差异计算，预估收益为简化模型计算结果",
+        "data": sorted(filtered, key=lambda x: x.get("estimated_annual_roi", 0), reverse=True),
+        "data_source_note": "与 /api/analysis/price-opportunities 同源：日级模型 + 行政区中位数兜底；Hive ads_price_opportunities 不再用于本接口",
         "calculation_basis": {
-            "predicted_price_source": "XGBoost模型或行政区中位数",
-            "estimated_roi_formula": "日租金 × 20天 × 12月 / 投资成本 × 100%",
+            "predicted_price_source": "日级 XGBoost 或 district_median（见每条 prediction_source）",
+            "estimated_roi_formula": "(参考价−挂牌价)×20×12 / (挂牌价×20×12+1) ×100%（示意，非真实年化投资收益）",
             "assumptions": assumptions,
         },
     }

@@ -216,7 +216,7 @@ class DailyPriceForecastService:
         return dict(self._meta)
 
     def get_feature_importance_gain(self) -> Optional[Dict[str, float]]:
-        """日级点模型的 gain 重要性，键为训练特征名；供因子页与房源级重要性对照。"""
+        """日级点模型的 gain 重要性，键为训练特征名；供因子分解页展示。"""
         if not self._load() or self._point is None or not self._feature_names:
             return None
         try:

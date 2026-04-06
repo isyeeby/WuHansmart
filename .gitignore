@@ -47,10 +47,11 @@ sql_app.db
 # 模型二进制：大文件勿提交；XGBoost 主模型与训练导出的编码器体积小，随仓库发布便于部署
 models/*.pkl
 models/**/*.pkl
-!models/xgboost_price_model_latest.pkl
-!models/district_encoder_latest.pkl
-!models/trade_area_encoder_latest.pkl
-!models/house_type_encoder_latest.pkl
+!models/xgboost_price_daily_model.pkl
+!models/feature_names_daily.json
+!models/district_encoder_daily.pkl
+!models/trade_area_encoder_daily.pkl
+!models/house_type_encoder_daily.pkl
 models/*.npz
 
 # 大体积日历/导入数据（勿提交）
