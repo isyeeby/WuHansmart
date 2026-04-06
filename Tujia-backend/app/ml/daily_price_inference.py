@@ -18,7 +18,7 @@ _FACILITY_ORDERED = ordered_facility_columns()
 
 
 def _facility_mapping_from_features(features: Dict[str, Any]) -> Dict[str, int]:
-    """与 ModelManager.predict_price 中设施映射一致。"""
+    """设施字段 → 训练用二值列，与训练脚本特征构造一致。"""
     hot_water_v = (
         int(bool(features.get("hot_water")))
         if features.get("hot_water") is not None

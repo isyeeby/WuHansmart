@@ -56,10 +56,24 @@ def _user_preference_regions(db: Session, user_id: int, top_n: int = 5) -> Tuple
     return top_d, top_t
 
 
-def _listing_to_detail_response(listing: Listing) -> schemas.ListingDetailResponse:
-    """拼装详情：解析三模块 JSON 字符串。"""
+def _listing_to_detail_response(listing: Listing, db: Session) -> schemas.ListingDetailResponse:
+    """拼装详情：解析三模块 JSON 字符串；展示价优先当日日历。"""
+    from datetime import datetime
+
     base = schemas.ListingListItem.model_validate(listing)
     d = base.model_dump()
+    d.pop("display_price", None)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    pc = (
+        db.query(PriceCalendar)
+        .filter(
+            PriceCalendar.unit_id == listing.unit_id,
+            PriceCalendar.date == today_str,
+        )
+        .first()
+    )
+    cal_p = float(pc.price or 0) if pc else 0.0
+    d["display_price"] = cal_p if cal_p > 0 else float(listing.final_price or 0)
     for raw_field, out_field in (
         ("facility_module_json", "facility_module"),
         ("comment_module_json", "comment_module"),
@@ -158,11 +172,37 @@ async def get_listings(
     total = query.count()
     items = query.offset((page - 1) * size).limit(size).all()
 
+    from datetime import datetime
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    unit_ids = [row.unit_id for row in items]
+    today_price_by_unit: dict = {}
+    if unit_ids:
+        for pc in (
+            db.query(PriceCalendar)
+            .filter(
+                PriceCalendar.unit_id.in_(unit_ids),
+                PriceCalendar.date == today_str,
+            )
+            .all()
+        ):
+            p = float(pc.price or 0)
+            if p > 0:
+                today_price_by_unit[pc.unit_id] = p
+
+    list_items: List[schemas.ListingListItem] = []
+    for row in items:
+        base = schemas.ListingListItem.model_validate(row)
+        disp = today_price_by_unit.get(row.unit_id)
+        if disp is None:
+            disp = float(row.final_price or 0)
+        list_items.append(base.model_copy(update={"display_price": disp}))
+
     return schemas.ListingListResponse(
         total=total,
         page=page,
         size=size,
-        items=[schemas.ListingListItem.model_validate(item) for item in items],
+        items=list_items,
     )
 
 
@@ -178,7 +218,7 @@ async def get_listing_detail(
     if not listing:
         raise HTTPException(status_code=404, detail="房源不存在")
 
-    return _listing_to_detail_response(listing)
+    return _listing_to_detail_response(listing, db)
 
 
 @router.get("/{unit_id}/gallery", response_model=schemas.ListingGalleryResponse)
@@ -292,6 +332,19 @@ async def get_price_calendar(
     if not start_date and calendars:
         start_date = calendars[0].date
         end_date = calendars[-1].date
+
+    # PriceCalendarResponse.date_range 要求 start/end 均为 str，不能为 None
+    if start_date is None or end_date is None:
+        if calendars:
+            start_date = str(calendars[0].date)
+            end_date = str(calendars[-1].date)
+        else:
+            today = datetime.now().strftime("%Y-%m-%d")
+            start_date = start_date or today
+            end_date = end_date or today
+    else:
+        start_date = str(start_date)
+        end_date = str(end_date)
     
     # 构建响应数据
     calendar_items = [
@@ -347,10 +400,12 @@ async def get_similar_listings(
     ).limit(limit).all()
     
     result = []
+    ref = float(listing.final_price or 0)
+    anchor = ref if ref > 0 else 1.0
     for item in similar:
-        # 计算相似度分数
-        price_diff = abs(item.final_price - listing.final_price)
-        similarity = max(0, 100 - price_diff)
+        other = float(item.final_price or 0)
+        rel = abs(other - ref) / anchor
+        similarity = max(0.0, min(100.0, 100.0 * (1.0 - min(1.0, rel))))
         
         result.append(schemas.ListingSimilarResponse(
             unit_id=item.unit_id,

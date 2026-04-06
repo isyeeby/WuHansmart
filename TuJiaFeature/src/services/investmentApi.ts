@@ -112,10 +112,12 @@ export interface InvestmentOpportunity {
   district: string;
   current_price: number;
   predicted_price: number;
+  price_gap?: number;
   gap_rate: number;
   rating: number;
   estimated_annual_roi: number;
   investment_score: number;
+  /** xgboost_daily | district_median */
   prediction_source?: string;
 }
 
@@ -177,15 +179,40 @@ export const getInvestmentRanking = async (limit: number = 10): Promise<Investme
   return response.data;
 };
 
-/**
- * 投资机会推荐
- */
-export const getInvestmentOpportunities = async (
-  minRoi: number = 10,
-  maxBudget?: number
-): Promise<InvestmentOpportunitiesResponse | InvestmentOpportunity[]> => {
-  const response = await apiClient.get('/api/investment/opportunities', {
-    params: { min_roi: minRoi, max_budget: maxBudget }
-  });
-  return response.data;
+/** 投资机会 / 价格洼地（与 /api/analysis/price-opportunities 同源） */
+export type InvestmentOpportunitiesQuery = {
+  minRoi?: number;
+  minGapRate?: number;
+  limit?: number;
+  maxBudget?: number;
 };
+
+/**
+ * 投资机会推荐（支持价差阈值、条数；兼容旧调用 getInvestmentOpportunities(10) 表示 minRoi）
+ */
+export async function getInvestmentOpportunities(
+  minRoiOrQuery?: number | InvestmentOpportunitiesQuery,
+  maxBudgetLegacy?: number
+): Promise<InvestmentOpportunitiesResponse | InvestmentOpportunity[]> {
+  let minRoi = 10;
+  let minGapRate = 20;
+  let limit = 50;
+  let maxBudget: number | undefined;
+  if (typeof minRoiOrQuery === 'number') {
+    minRoi = minRoiOrQuery;
+    maxBudget = maxBudgetLegacy;
+  } else if (minRoiOrQuery != null && typeof minRoiOrQuery === 'object') {
+    minRoi = minRoiOrQuery.minRoi ?? 10;
+    minGapRate = minRoiOrQuery.minGapRate ?? 20;
+    limit = minRoiOrQuery.limit ?? 50;
+    maxBudget = minRoiOrQuery.maxBudget;
+  }
+  const params: Record<string, number> = {
+    min_roi: minRoi,
+    min_gap_rate: minGapRate,
+    limit,
+  };
+  if (maxBudget != null) params.max_budget = maxBudget;
+  const response = await apiClient.get('/api/investment/opportunities', { params });
+  return response.data;
+}

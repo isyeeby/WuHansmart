@@ -25,6 +25,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Dashboard"])
 
 
+def _price_calendar_period_daily_avg(
+    db: Session, start_dt: datetime, end_dt: datetime
+) -> float:
+    """
+    价格日历在 [start_dt, end_dt]（含）内：按自然日聚合后再对「有数据的日期」取平均。
+    无行或全部无有效价时返回 0.0。
+    """
+    from app.db.database import PriceCalendar
+
+    rows = (
+        db.query(
+            PriceCalendar.date,
+            func.avg(PriceCalendar.price).label("daily_avg"),
+        )
+        .filter(PriceCalendar.date >= start_dt.strftime("%Y-%m-%d"))
+        .filter(PriceCalendar.date <= end_dt.strftime("%Y-%m-%d"))
+        .group_by(PriceCalendar.date)
+        .order_by(PriceCalendar.date)
+        .all()
+    )
+    daily_avgs = [float(r.daily_avg or 0) for r in rows if r.daily_avg is not None]
+    if not daily_avgs:
+        return 0.0
+    return sum(daily_avgs) / len(daily_avgs)
+
+
 def _dashboard_trade_area_heat_raw(
     listing_count: int,
     avg_rating: float,
@@ -171,7 +197,7 @@ async def get_district_comparison(
 
 def _compute_dashboard_kpi(db: Session) -> schemas.DashboardKPIResponse:
     """KPI 计算体（供进程内短缓存复用）。"""
-    from app.db.database import Listing, PriceCalendar
+    from app.db.database import Listing
 
     total_listings = db.query(Listing).count()
     avg_price_result = db.query(func.avg(Listing.final_price)).scalar()
@@ -190,34 +216,38 @@ def _compute_dashboard_kpi(db: Session) -> schemas.DashboardKPIResponse:
 
     price_change_percent = 0.0
     try:
-        today = datetime.now()
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         current_start = today.replace(day=1)
         prev_month_end = current_start - timedelta(days=1)
         prev_month_start = prev_month_end.replace(day=1)
-        compare_day = min(today.day, calendar.monthrange(prev_month_end.year, prev_month_end.month)[1])
+        compare_day = min(
+            today.day, calendar.monthrange(prev_month_end.year, prev_month_end.month)[1]
+        )
         prev_period_end = prev_month_start.replace(day=compare_day)
 
-        def _period_avg(start_dt: datetime, end_dt: datetime) -> float:
-            rows = (
-                db.query(
-                    PriceCalendar.date,
-                    func.avg(PriceCalendar.price).label("daily_avg")
-                )
-                .filter(PriceCalendar.date >= start_dt.strftime("%Y-%m-%d"))
-                .filter(PriceCalendar.date <= end_dt.strftime("%Y-%m-%d"))
-                .group_by(PriceCalendar.date)
-                .order_by(PriceCalendar.date)
-                .all()
-            )
-            daily_avgs = [float(r.daily_avg or 0) for r in rows if r.daily_avg is not None]
-            if not daily_avgs:
-                return 0.0
-            return sum(daily_avgs) / len(daily_avgs)
-
-        current_avg = _period_avg(current_start, today)
-        prev_avg = _period_avg(prev_month_start, prev_period_end)
-        if prev_avg > 0:
+        # 主口径：本月 1 日～今日 vs 上月 1 日～上月「同日」的日历日均价对比
+        current_avg = _price_calendar_period_daily_avg(db, current_start, today)
+        prev_avg = _price_calendar_period_daily_avg(db, prev_month_start, prev_period_end)
+        if prev_avg > 0 and current_avg > 0:
             price_change_percent = round((current_avg - prev_avg) / prev_avg * 100, 1)
+        else:
+            # 回退：本月/上月窗口常因「新月初无日历」或库内仅有一段连续日期而为 0。
+            # 用「最近 window 天」vs「再往前 window 天」的日历日均价环比（与 /trends 同源表）。
+            for window in (14, 7):
+                end_a = today
+                start_a = today - timedelta(days=window - 1)
+                end_b = start_a - timedelta(days=1)
+                start_b = end_b - timedelta(days=window - 1)
+                avg_a = _price_calendar_period_daily_avg(db, start_a, end_a)
+                avg_b = _price_calendar_period_daily_avg(db, start_b, end_b)
+                if avg_b > 0 and avg_a > 0:
+                    price_change_percent = round((avg_a - avg_b) / avg_b * 100, 1)
+                    logger.info(
+                        "dashboard kpi price_change: used rolling %dd vs prior %dd (calendar)",
+                        window,
+                        window,
+                    )
+                    break
     except Exception as e:
         logger.warning("dashboard kpi price_change from calendar: %s", e)
 
@@ -230,8 +260,16 @@ def _compute_dashboard_kpi(db: Session) -> schemas.DashboardKPIResponse:
         avg_roi=avg_roi,
         kpi_definitions={
             "occupancy_rate": "需求热度指数（约50–92）：由全市平均评分与收藏数估算，非订单口径入住率。",
-            "avg_roi": "市场吸引力指数（约5–26）：综合评分、收藏、供给等多因素的展示指数，非财务投资回报率。",
-            "price_change_percent": "价格环比：价格日历中「本月1日至今日」与「上月同期」的日均价对比；无日历数据时为 0。",
+            "avg_roi": (
+                "市场吸引力指数（约5–26，非财务ROI）：9+raw 后限制在5–26；"
+                "raw=(评分/5)×10+min(收藏/150,1)×7+(需求热度−55)×0.12+min(房源/800,1)×6；"
+                "需求热度=需求热度卡片同源（52+(评分/5)×24+min(收藏×0.07,14)，限制50–92）。"
+            ),
+            "price_change_percent": (
+                "价格环比：优先「本月1日～今日」与「上月同期」价格日历日均价；"
+                "若该窗口无数据则回退为「最近14天 vs 再前14天」（再试7天）；"
+                "仍无有效日历则为 0。与首页曲线同源 price_calendars 表。"
+            ),
         },
     )
 

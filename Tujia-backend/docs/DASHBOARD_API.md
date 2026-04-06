@@ -1,6 +1,8 @@
 # Dashboard API 接口文档
 
-首页 Dashboard 数据接口文档，提供 KPI 指标、商圈热力图、热门商圈排行等数据。
+经营驾驶舱 **KPI / 热力 / 榜单 / 趋势** 等接口说明（路径前缀 `/api/dashboard`）。
+
+> **前端同一页面**还包含 **商圈名录**、**设施溢价** 等 Tab，数据来自 **`/api/analysis/*`**，见 [BACKEND_API_SPEC.md](./BACKEND_API_SPEC.md) 第 3.4 节；本文不重复描述。
 
 ---
 
@@ -31,8 +33,8 @@
 | avg_price | number | 全市平均房价（元/晚） | 数据库实时计算 |
 | price_change_percent | number | 价格环比变化百分比 | 基于当前数据估算 |
 | district_count | integer | 覆盖商圈/行政区数量 | 数据库实时统计 |
-| occupancy_rate | number | 平均入住率（百分比） | 基于评分和收藏数估算 |
-| avg_roi | number | 平均投资回报率（百分比） | 基于价格和入住率估算 |
+| occupancy_rate | number | 需求热度展示（接口常带 `%` 样式） | **非** PMS 入住率；见响应 `kpi_definitions.occupancy_rate`（约 50–92 的代理指数） |
+| avg_roi | number | 市场回报相关综合指数（展示用） | 由 `market_return_index` 等与均价、热度代理合成；**非**审计级财务 ROI；见 `kpi_definitions.avg_roi` |
 
 ### 响应示例
 
@@ -49,11 +51,13 @@
 
 ### 数据说明
 
-- **total_listings**: 数据库中房源总数
-- **avg_price**: 所有房源价格的算术平均值
-- **price_change_percent**: 模拟数据，实际应基于历史价格对比计算
-- **occupancy_rate**: 估算值，基于评分（权重高）和收藏数综合计算
-- **avg_roi**: 估算值，基于平均价格和估算入住率计算得出
+- **total_listings**：`listings` 表行数（或当前实现等价统计）。
+- **avg_price**：库内展示价（`final_price`）简单平均，粗看整体价格带。
+- **price_change_percent**：来自**价格日历**的滚动对比（如本月至今 vs 上月同期，失败时有回退）；非随意模拟数，详见 [`dashboard.py`](../app/api/endpoints/dashboard.py) 与响应内说明。
+- **occupancy_rate**：**需求热度代理**，勿称真实入住率；与前端 Tooltip、`METRICS_GLOSSARY` 一致。
+- **avg_roi**：**展示用综合指数**，勿直接当投资回报率结论。
+
+更多名词对照见 [METRICS_GLOSSARY.md](./METRICS_GLOSSARY.md)。
 
 ---
 

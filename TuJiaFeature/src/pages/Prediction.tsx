@@ -286,38 +286,19 @@ export default function Prediction() {
   };
 
   const getPriceChangeReason = (f: any): string => {
-    if (forecastData?.model === 'xgboost_daily' || f.factors?.xgboost_daily != null) {
-      const parts: string[] = [];
-      if (f.is_holiday) parts.push(f.holiday_name ? `${f.holiday_name}（已入模型）` : '节假日（已入模型）');
-      if (f.is_weekend && !f.is_holiday) parts.push('周末（已入模型）');
-      if (
-        f.price_low != null &&
-        f.price_high != null &&
-        Number.isFinite(f.price_low) &&
-        Number.isFinite(f.price_high)
-      ) {
-        parts.push(`区间 ¥${Math.round(f.price_low)}–¥${Math.round(f.price_high)}`);
-      }
-      if (!parts.length) parts.push('日级模型逐日预测');
-      return parts.join('；');
+    const parts: string[] = [];
+    if (f.is_holiday) parts.push(f.holiday_name ? `${f.holiday_name}（已入模型）` : '节假日（已入模型）');
+    if (f.is_weekend && !f.is_holiday) parts.push('周末（已入模型）');
+    if (
+      f.price_low != null &&
+      f.price_high != null &&
+      Number.isFinite(f.price_low) &&
+      Number.isFinite(f.price_high)
+    ) {
+      parts.push(`区间 ¥${Math.round(f.price_low)}–¥${Math.round(f.price_high)}`);
     }
-    const reasons: string[] = [];
-    const hol = f.factors?.holiday;
-    const wk = f.factors?.weekend;
-    if (f.is_holiday && hol != null && Number.isFinite(hol)) {
-      reasons.push(`${f.holiday_name || '节假日'}溢价 +${Math.round((hol - 1) * 100)}%`);
-    } else if (f.is_holiday) {
-      reasons.push(`${f.holiday_name || '节假日'}溢价`);
-    }
-    if (f.is_weekend && !f.is_holiday && wk != null && Number.isFinite(wk)) {
-      reasons.push(`周末溢价 +${Math.round((wk - 1) * 100)}%`);
-    } else if (f.is_weekend && !f.is_holiday) {
-      reasons.push('周末溢价');
-    }
-    if (f.factors?.advance_booking > 1) reasons.push('近期需求旺盛');
-    if (f.factors?.advance_booking < 1) reasons.push('提前预订优惠');
-    if (!reasons.length) reasons.push('工作日标准定价');
-    return reasons.join('；');
+    if (!parts.length) parts.push('日级模型逐日预测');
+    return parts.join('；');
   };
 
   // ─── Tornado 图（因子敏感度） ───
@@ -453,8 +434,7 @@ export default function Prediction() {
     if (!competitivenessData) return {};
     const pa = competitivenessData.pricing_analysis || {};
     const mp = competitivenessData.market_position || {};
-    const fairLabel =
-      pa.fair_price_model === 'xgboost_daily' ? '模型基准价（锚定日）' : '模型合理价';
+    const fairLabel = '模型基准价（锚定日）';
     const names = ['您的定价', fairLabel, '商圈均价'];
     const values = [
       Math.round(pa.user_price || 0),
@@ -751,13 +731,7 @@ export default function Prediction() {
             <Col xs={24} sm={8}>
               <div className="prediction-stat-card p-4">
                 <Statistic
-                  title={
-                    <span className="text-xs text-[var(--ink-muted)]">
-                      {factorData.reference_model === 'xgboost_daily'
-                        ? '锚定日模型基准价'
-                        : '模型预测价'}
-                    </span>
-                  }
+                  title={<span className="text-xs text-[var(--ink-muted)]">锚定日模型基准价</span>}
                   value={factorData.predicted_price}
                   prefix="¥"
                   precision={0}

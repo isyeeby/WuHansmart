@@ -54,47 +54,6 @@ export interface PricePredictionResponse {
   district_avg_price: number;
 }
 
-// 竞品房源类型
-export interface CompetitorItem {
-  unit_id: string;
-  title: string;
-  price: number;
-  rating: number;
-  favorite_count: number;
-  house_tags: string[];
-  similarity_score: number;
-  price_diff: number;
-}
-
-// 市场分析类型
-export interface MarketAnalysis {
-  avg_price: number;
-  min_price: number;
-  max_price: number;
-  avg_rating: number;
-  total_competitors: number;
-}
-
-// 市场定位类型
-export interface Position {
-  price_rank: number;
-  price_percentile: number;
-  rating_rank: number;
-}
-
-// 竞品分析响应 - 对应 /api/predict/competitors/{unit_id}
-export interface CompetitorAnalysisResponse {
-  target_listing: {
-    unit_id: string;
-    title: string;
-    price: number;
-    rating: number;
-  };
-  competitors: CompetitorItem[];
-  market_analysis: MarketAnalysis;
-  position: Position;
-}
-
 // 预测结果 (兼容旧接口)
 export interface ForecastResult {
   dates: string[];
@@ -161,8 +120,6 @@ export type PredictionAnalysisParams = {
   lake_view?: boolean;
   mountain_view?: boolean;
   garden?: boolean;
-  /** 默认 true：请求日级 XGBoost 曲线；设为 false 仅用规则因子回退 */
-  use_daily_xgb?: boolean;
 };
 
 /**
@@ -178,22 +135,6 @@ export const predictPrice = async (
 };
 
 /**
- * 获取竞品分析 (新接口)
- * 对应 /api/predict/competitors/{unit_id}
- * @param unitId 房源ID
- * @param limit 数量限制，默认10
- */
-export const getCompetitorAnalysis = async (
-  unitId: string,
-  limit?: number
-): Promise<CompetitorAnalysisResponse> => {
-  const response = await apiClient.get(`/api/predict/competitors/${unitId}`, {
-    params: { limit }
-  });
-  return response.data;
-};
-
-/**
  * 获取14天价格预测
  * 注意：后端需要 district, room_type, capacity, bedrooms, area 等参数
  * @param params 预测参数
@@ -205,13 +146,11 @@ export const getForecast = async (params: PredictionAnalysisParams): Promise<any
     river_view: _rv,
     lake_view: _lv,
     mountain_view: _mv,
-    use_daily_xgb,
     ...rest
   } = params;
 
   const q: Record<string, string | number | boolean | undefined> = {
     ...rest,
-    use_daily_xgb: use_daily_xgb !== false,
   };
   const anchor = explicitBase ?? current_price;
   if (anchor != null && Number(anchor) > 0 && Number.isFinite(Number(anchor))) {
@@ -256,35 +195,3 @@ export const getCompetitivenessAssessment = async (
   return response.data;
 };
 
-/**
- * 获取价格历史趋势
- * @param district 商圈名称
- * @param days 统计天数
- */
-export const getPriceTrend = async (
-  district: string,
-  days: number = 30
-): Promise<{
-  district: string;
-  days: number;
-  data_kind?: string;
-  methodology?: { note?: string };
-  trend: {
-    date: string;
-    predicted_price: number;
-    actual_price: number;
-  }[];
-  summary: {
-    start_price: number;
-    end_price: number;
-    change_rate: number;
-    sample_count?: number;
-    min_price?: number;
-    max_price?: number;
-  };
-}> => {
-  const response = await apiClient.get('/api/predict/trend', {
-    params: { district, days }
-  });
-  return response.data;
-};

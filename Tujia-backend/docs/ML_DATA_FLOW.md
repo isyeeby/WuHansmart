@@ -176,11 +176,11 @@ python scripts/train_xgboost_model.py --help
 
 | 文件 | 说明 |
 |------|------|
-| `xgboost_price_model_YYYYMMDD_HHMMSS.pkl` | 时间戳版本模型文件 |
-| `xgboost_price_model_latest.pkl` | 最新模型（始终指向最新版本） |
-| `feature_names_YYYYMMDD_HHMMSS.json` | 特征名列表 |
-| `model_metrics_YYYYMMDD_HHMMSS.json` | 模型评估指标和元数据 |
-| `feature_importance_YYYYMMDD_HHMMSS.json` | 特征重要性分析 |
+| `xgboost_price_daily_model.pkl` | 日级定价点预测模型（`train_model_daily_mysql.py`） |
+| `feature_names_daily.json` | 日级特征名列表 |
+| `model_metrics_daily.json` | 日级训练指标与元数据 |
+| `xgboost_price_daily_q020.pkl` 等 | 日级分位数模型（可选） |
+| `listing_similarity_*.npz` | 推荐用内容相似度矩阵（与定价独立） |
 
 ### 模型元数据示例
 

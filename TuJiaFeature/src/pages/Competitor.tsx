@@ -291,7 +291,14 @@ const Competitor: React.FC = () => {
           title="周边竞品"
           extra={
             <div className="flex flex-wrap items-center gap-2">
-              <Tooltip title="当前按同商圈/行政区筛选竞品，未做球面距离过滤">
+              <Tooltip
+                overlayStyle={{ maxWidth: 360 }}
+                title={
+                  competitorAnalysis?.market_position?.selection_note?.trim()
+                    ? competitorAnalysis.market_position.selection_note
+                    : '加载分析后显示说明：同行政区为池；若「我的房源」与同区平台房源均有有效经纬度，则按球面直线距离取最近若干条并展示公里数。'
+                }
+              >
                 <EnvironmentOutlined className="text-[var(--jade)]" />
               </Tooltip>
               {competitorAnalysis?.competitors && competitorAnalysis.competitors.length > 0 && (

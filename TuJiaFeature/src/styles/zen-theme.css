@@ -1806,3 +1806,217 @@ body {
   border-color: rgba(90, 138, 110, 0.45) !important;
   box-shadow: 0 0 0 2px rgba(90, 138, 110, 0.12) !important;
 }
+
+/* ==========================================================================
+   Zen 富文本 Tooltip（数据说明、指标释义）— antd 6 内容区为 .ant-tooltip-container
+   ========================================================================== */
+.zen-tooltip-rich.ant-tooltip {
+  max-width: min(360px, 92vw);
+  /* 与主题箭头填充对齐（回退由下方 ::before 覆盖） */
+  --ant-tooltip-arrow-background-color: var(--paper-cream);
+}
+
+.zen-tooltip-rich .ant-tooltip-container {
+  position: relative;
+  max-width: min(340px, 90vw);
+  padding: 14px 16px 16px 19px !important;
+  color: var(--ink-dark) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 12px !important;
+  line-height: 1.65 !important;
+  letter-spacing: 0.02em;
+  text-align: start !important;
+  word-break: break-word;
+  background: linear-gradient(
+    165deg,
+    var(--paper-white) 0%,
+    var(--paper-cream) 50%,
+    #ebe6de 100%
+  ) !important;
+  border: 1px solid var(--paper-warm) !important;
+  border-radius: 12px !important;
+  box-shadow:
+    var(--shadow-medium),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 0 0 1px rgba(184, 149, 110, 0.08),
+    0 0 40px rgba(184, 149, 110, 0.06) !important;
+}
+
+.zen-tooltip-rich .ant-tooltip-container::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--ochre-light), var(--ochre));
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.zen-tooltip-rich .ant-tooltip-arrow::before {
+  background: var(--paper-cream) !important;
+}
+
+.zen-tooltip-rich .ant-tooltip-container strong {
+  color: var(--ink-black);
+  font-weight: 600;
+}
+
+.zen-tooltip-rich .ant-tooltip-container a {
+  color: var(--ochre);
+}
+
+.zen-tooltip-rich .ant-tooltip-container a:hover {
+  color: var(--ochre-light);
+}
+
+/* ==========================================================================
+   投资分析页 — 表格、Tabs、导读折叠（.investment-analysis-scope）
+   ========================================================================== */
+.investment-analysis-scope .inv-zen-collapse.ant-collapse {
+  border: none;
+  background: transparent;
+}
+
+.investment-analysis-scope .inv-zen-collapse.ant-collapse > .ant-collapse-item {
+  border: 1px solid var(--paper-warm);
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(
+    165deg,
+    rgba(250, 248, 245, 0.98) 0%,
+    rgba(245, 242, 237, 0.92) 45%,
+    rgba(235, 230, 222, 0.55) 100%
+  );
+  box-shadow: var(--shadow-soft), 0 0 0 1px rgba(184, 149, 110, 0.06);
+}
+
+.investment-analysis-scope .inv-zen-collapse .ant-collapse-header {
+  padding: 14px 18px !important;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-black) !important;
+  align-items: center !important;
+}
+
+.investment-analysis-scope .inv-zen-collapse .ant-collapse-content-box {
+  padding: 0 18px 18px !important;
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card > .ant-tabs-nav {
+  margin-bottom: 1.25rem;
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card > .ant-tabs-nav::before {
+  border-color: var(--paper-warm);
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card .ant-tabs-tab {
+  border-radius: 12px 12px 0 0 !important;
+  border: 1px solid var(--paper-warm) !important;
+  border-bottom: none !important;
+  background: rgba(245, 242, 237, 0.65) !important;
+  font-family: var(--font-sans);
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card .ant-tabs-tab:hover {
+  background: rgba(250, 248, 245, 0.95) !important;
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card .ant-tabs-tab-active {
+  background: var(--paper-white) !important;
+  box-shadow: 0 -2px 0 var(--ochre) inset;
+}
+
+.investment-analysis-scope .investment-tabs-zen.ant-tabs-card .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--ink-black);
+  font-weight: 600;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-table {
+  background: transparent;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-table-container {
+  border-radius: 0 0 12px 12px;
+  border: 1px solid var(--paper-warm);
+  border-top: none;
+  overflow: hidden;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-table-thead > tr > th {
+  background: linear-gradient(180deg, var(--paper-white), var(--paper-cream)) !important;
+  color: var(--ink-dark) !important;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(196, 92, 62, 0.22) !important;
+  font-family: var(--font-sans);
+}
+
+.investment-analysis-scope .zen-investment-table .ant-table-tbody > tr > td {
+  border-color: var(--paper-warm) !important;
+  font-size: 13px;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-table-tbody > tr:hover > td {
+  background: rgba(90, 138, 110, 0.06) !important;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-pagination-item-active {
+  border-color: var(--ochre) !important;
+}
+
+.investment-analysis-scope .zen-investment-table .ant-pagination-item-active a {
+  color: var(--ochre) !important;
+}
+
+.investment-analysis-scope .inv-zen-card.ant-card .ant-card-head {
+  border-bottom-color: var(--paper-warm);
+  font-family: var(--font-serif);
+}
+
+.investment-analysis-scope .inv-zen-card.ant-card .ant-card-head-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink-black);
+}
+
+.investment-analysis-scope .inv-filter-strip {
+  border: 1px solid var(--paper-warm);
+  border-radius: 12px;
+  background: linear-gradient(
+    120deg,
+    var(--paper-white) 0%,
+    rgba(245, 242, 237, 0.85) 50%,
+    var(--paper-white) 100%
+  );
+  box-shadow: var(--shadow-soft);
+}
+
+.investment-analysis-scope .inv-filter-strip .ant-slider .ant-slider-track {
+  background: linear-gradient(90deg, var(--jade), var(--ochre-light));
+}
+
+.investment-analysis-scope .inv-filter-strip .ant-slider .ant-slider-handle::after {
+  box-shadow: 0 0 0 2px var(--ochre);
+}
+
+.investment-analysis-scope .inv-opp-list .ant-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.investment-analysis-scope .inv-opp-row:hover {
+  border-color: rgba(196, 92, 62, 0.28) !important;
+  box-shadow: var(--shadow-medium), 0 0 0 1px rgba(184, 149, 110, 0.08);
+}
+
+.investment-analysis-scope .inv-opp-list .ant-pagination {
+  font-family: var(--font-sans);
+}

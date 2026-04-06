@@ -7,6 +7,8 @@ export interface ListingItem {
   district: string;
   trade_area?: string | null;
   final_price: number;
+  /** 列表展示价：后端优先当日日历价，无则同 final_price */
+  display_price?: number | null;
   original_price?: number | null;
   discount_rate?: number | null;
   rating?: number | null;
@@ -21,7 +23,7 @@ export interface ListingItem {
   latitude?: number | null;
 }
 
-/** 详情接口：含途家 dynamicModule 三模块（已解析为对象） */
+/** 详情接口：含途家 dynamicModule 三模块（已解析为对象）；含 display_price 与列表同口径 */
 export interface ListingDetail extends ListingItem {
   facility_module?: Record<string, unknown> | null;
   comment_module?: Record<string, unknown> | null;

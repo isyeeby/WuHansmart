@@ -140,21 +140,6 @@ export const getPriceDistribution = async (district?: string): Promise<PriceDist
 };
 
 /**
- * 获取价格洼地房源（投资机会）
- * @param minGapRate 最小价差率(%)，默认20
- * @param limit 返回数量，默认20
- */
-export const getPriceOpportunities = async (
-  minGapRate?: number,
-  limit?: number
-): Promise<PriceOpportunity[]> => {
-  const response = await apiClient.get('/api/analysis/price-opportunities', {
-    params: { min_gap_rate: minGapRate, limit }
-  });
-  return response.data;
-};
-
-/**
  * 获取投资收益率排名
  * @param limit 返回数量，默认50
  */

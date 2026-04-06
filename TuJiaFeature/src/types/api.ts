@@ -792,28 +792,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/predict/trend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Price Trend
-         * @description 获取价格预测的历史趋势
-         *
-         *     展示指定商圈的价格变化趋势，包括预测价格和实际价格对比
-         */
-        get: operations["get_price_trend_api_predict_trend_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/analysis/districts": {
         parameters: {
             query?: never;
@@ -3895,40 +3873,6 @@ export interface operations {
                 "application/json": components["schemas"]["PredictionRequest"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_price_trend_api_predict_trend_get: {
-        parameters: {
-            query: {
-                /** @description 商圈名称 */
-                district: string;
-                /** @description 统计天数 */
-                days?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

@@ -1,7 +1,7 @@
 # 民宿价格数据分析系统 - 后端系统分析文档
 
 **版本**: v2.0  
-**更新日期**: 2026-03-19  
+**更新日期**: 2026-04-05  
 **目标读者**: 前端开发团队  
 
 ---
@@ -53,14 +53,13 @@
 │                        民宿价格数据分析系统                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  Dashboard  │  │  商圈分析    │  │       价格预测           │ │
-│  │  数据大屏   │  │  Analysis   │  │      Prediction         │ │
-│  │             │  │             │  │                         │ │
-│  │ • 核心指标  │  │ • 商圈列表  │  │  • 价格预测              │ │
-│  │ • 价格趋势  │  │ • 设施溢价  │  │  • 竞品分析              │ │
-│  │ • 商圈对比  │  │ • 价格分布  │  │                         │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
+│  ┌──────────────────────────────────┐  ┌─────────────────────────┐ │
+│  │  Dashboard 经营驾驶舱（多 Tab）    │  │       价格预测           │ │
+│  │  • 市场总览：核心指标/趋势/热力    │  │      Prediction         │ │
+│  │  • 商圈名录：/api/analysis/districts│  │  • 价格预测              │ │
+│  │  • 设施溢价：analysis/facility-premium │  │  • 竞品分析(/predict)    │ │
+│  │  （旧路由 /analysis → /dashboard）  │  │                         │ │
+│  └──────────────────────────────────┘  └─────────────────────────┘ │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────────┐│
 │  │                      房源中心                                ││
@@ -97,8 +96,7 @@
 | 认证模块 | `/api/auth` | 用户注册、登录、Token管理 |
 | 用户模块 | `/api/user` | 用户信息、偏好设置 |
 | 房源列表 | `/api/listings` | 房源搜索、筛选、分页 |
-| Dashboard | `/api/dashboard` | 核心指标、趋势图表 |
-| 商圈分析 | `/api/analysis` | 商圈统计、设施溢价 |
+| Dashboard（前端含多 Tab） | `/api/dashboard`、`/api/analysis/*` | KPI/热力/榜单走 dashboard；**商圈名录、设施溢价、价格分布**等走 analysis（与「市场总览」同页） |
 | 我的房源 | `/api/my-listings` | 房源上传、竞品对比、定价建议 |
 | 价格预测 | `/api/predict` | 价格预测、竞品分析 |
 | 标签库 | `/api/tags` | 标签分类、热门标签 |
@@ -345,7 +343,7 @@
 
 | 字段名 | 中文名称 | 说明 |
 |-------|---------|------|
-| similarity_score | 相似度分数 | 0-100，越高越相似 |
+| similarity_score | 相似度分数 | 0–100；**相对价差**：`100×(1−min(1, \|Δ价\|/参考价))`，参考价为当前房源 `final_price`（≤0 时用 1 避免除零）；列表顺序仍为 SQL（同区同户型按价差升序） |
 
 ---
 
@@ -438,6 +436,8 @@
 
 ### 3.4 商圈分析模块 (Analysis)
 
+前端展示：数据在 **经营驾驶舱** 页 Tab「商圈名录」「设施溢价」中加载；路由 **`/analysis`** 重定向至 **`/dashboard?tab=districts`**。
+
 #### 3.4.1 获取商圈列表
 
 **接口**: `GET /api/analysis/districts`
@@ -486,7 +486,9 @@
 
 **接口**: `GET /api/analysis/facility-premium`
 
-**功能描述**: 分析各设施对价格的影响程度
+**功能描述**: 分析各设施对价格的影响程度（**描述性统计，非因果**）。
+
+**方法论（与实现对齐）**：对预设设施关键词，将样本按 `house_tags` 是否含该词分为两组，分别计算 `final_price` 均价并求差；两组均不少于 3 条才输出。未控制户型、面积、区位等混杂因素，**不能**解释为「加装该设施必然带来同等涨幅」。前端 Tab「设施溢价」内有用户可读说明。
 
 **响应示例**:
 ```json
@@ -598,11 +600,27 @@ Authorization: Bearer {token}
 
 ---
 
+#### 3.5.2a 两套竞品接口口径对照表
+
+系统内存在两条**独立**的竞品分析链路，**选池、相似度、价格分位**均不可混读；前端「我的房源 / 竞品情报」仅使用 **`GET /api/my-listings/{listing_id}/competitors`**。
+
+| 维度 | `GET /api/my-listings/{listing_id}/competitors` | `GET /api/predict/competitors/{unit_id}` |
+|------|--------------------------------------------------|------------------------------------------|
+| 主体 | 经营者上传的「我的房源」行 `listing_id` | 平台 `listings` 表的 `unit_id` |
+| 竞品选池 | 同行政区；有坐标时优先直线距离最近至多 10 条，否则同区前若干条 | 同行政区，按 `favorite_count` 降序取 `limit` 条 |
+| 相似度算法 | `competitor_similarity.py`：价格/卧室/床/人数/面积分项 0–100 后加权，缺失维重加权 | 七维标量（含价、评分、收藏、面积、卧室、床、人数）固定权重后 **加权余弦**，映射到 0–100 |
+| 排序 | 相似度降序，同分按距离升序 | 与 SQL 一致（收藏降序） |
+| 价格分位 | `current_price` 与竞品 `final_price` 合并排序后的名次/总数×100；见 `market_position.price_percentile_methodology` | 目标价与当前返回竞品价合并排序（`bisect_left` 名次）；见 `position.methodology` |
+
+---
+
 #### 3.5.3 获取竞品对比分析
 
 **接口**: `GET /api/my-listings/{listing_id}/competitors`
 
-**功能描述**: 分析我的房源与同商圈竞品的对比
+**功能描述**: 分析我的房源与同行政区平台竞品的对比。竞品选取规则见 `market_position.selection_note`（有坐标时优先按直线距离取最近若干条，否则取同区样本前若干条）。
+
+**相似度 `similarity_score`（0–100）**: 在单条竞品上，对以下维度分别得到 0–100 分项后按权重加权平均——**价格**（`current_price` 与 `final_price` 的相对价差）、**卧室数**、**床数**、**可住人数**（`max_guests` 与 `capacity`）、**面积**（相对误差）。任一侧缺失的维度不参与计算，剩余维度权重按比例放大；若全部维度均不可算则返回 **50**。返回的 `competitors` 数组按 **相似度降序**，相同相似度时按 **距离升序**（无距离则靠后）。
 
 **请求头**:
 ```
@@ -627,7 +645,8 @@ Authorization: Bearer {token}
   "market_position": {
     "avg_price": 280.50,
     "my_price_rank": 15,
-    "price_percentile": 35.2
+    "price_percentile": 35.2,
+    "price_percentile_methodology": "（见接口说明）"
   },
   "competitors": [
     {
@@ -655,8 +674,10 @@ Authorization: Bearer {token}
 | avg_price | 市场均价 | 竞品平均价格 |
 | my_price_rank | 价格排名 | 我的价格在竞品中的排名 |
 | price_percentile | 价格百分位 | 我的价格所处的百分位 |
-| competitors | 竞品列表 | 相似竞品房源 |
+| price_percentile_methodology | 分位口径说明 | 文本：`current_price` 与竞品 `final_price` 合并排序后的定义；勿与 predict 竞品分位混读 |
+| competitors | 竞品列表 | 相似竞品房源（已按相似度主排序） |
 | analysis | 分析结论 | 优劣势分析 |
+| competitors[].similarity_score | 相似度 | 0–100，价格与房型结构加权综合，缺失字段自动降权；见上文说明 |
 
 ---
 
@@ -664,7 +685,7 @@ Authorization: Bearer {token}
 
 **接口**: `POST /api/my-listings/{listing_id}/price-suggestion`
 
-**功能描述**: 基于XGBoost模型预测最优定价，给出调价建议
+**功能描述**: 优先使用**日级 XGBoost** 锚定日基准价给出建议；若日级模型未部署或不可用，则回退为**同行政区样本挂牌均价**，再无样本时建议价等于当前价。
 
 **请求头**:
 ```
@@ -710,11 +731,21 @@ Authorization: Bearer {token}
 
 ### 3.6 价格预测模块 (Prediction)
 
+#### 3.6.0 定价模型约定（日级 XGBoost）
+
+- **线上定价锚点与 14 天曲线**仅使用日级模型产物：`models/xgboost_price_daily_model.pkl`、`feature_names_daily.json` 及训练脚本 `scripts/train_model_daily_mysql.py` 导出的 encoder / 统计文件。
+- 下列接口在日级模型**未部署或推理失败**时返回 **HTTP 503**（响应 `detail` 说明缺失文件或训练命令）：`POST /api/predict/`、`GET /api/predict/quick`、`POST /api/predict/batch`（单条失败记 `status: failed`）、`POST /api/predict/price`、`GET /api/predict/forecast`、`POST /api/predict/factor-decomposition`、`POST /api/predict/competitiveness`。
+- `GET /api/predict/feature-importance`：日级可用时返回 Gain 重要性（`source: xgboost_daily`）；否则返回业务占位（`source: business_logic`）。
+- `POST /api/predict/reload-model`：重载**推荐相似度矩阵**（`ModelManager`）与**日级定价**文件。
+- `GET /api/analysis/price-opportunities`：返回 `{ "items": [...], "methodology": {...} }`。每条优先**日级预测价**，失败则用**行政区 eligible 挂牌中位数**（`prediction_source` 为 `xgboost_daily` 或 `district_median`）；含 `price_gap`（元）。`methodology` 中说明价差公式与单次请求模型调用上限。
+- **首页等平台级日趋势**请使用 `GET /api/dashboard/trends`（**已移除** `GET /api/predict/trend` 示意接口）。
+- `GET /api/investment/opportunities`：与上条**同源计算**（`app.services.price_opportunity_scan.compute_price_opportunities`），再按 `min_roi` / `max_budget` 过滤；**不再**使用 Hive `ads_price_opportunities`。返回信封含 `data`、`data_source_note`、`calculation_basis`。
+
 #### 3.6.1 价格预测
 
 **接口**: `POST /api/predict/price`
 
-**功能描述**: 输入房源特征，预测合理价格区间
+**功能描述**: 输入房源特征，由**日级 XGBoost** 给出锚定日合理价及区间。日级模型未就绪时返回 **503**。
 
 **请求参数**:
 
@@ -765,7 +796,8 @@ Authorization: Bearer {token}
     {"feature": "近地铁", "impact": "+12%", "detail": "交通便利溢价"},
     {"feature": "投影", "impact": "+8%", "detail": "热门设施溢价"}
   ],
-  "district_avg_price": 256.30
+  "district_avg_price": 256.30,
+  "prediction_model": "xgboost_daily"
 }
 ```
 
@@ -773,7 +805,8 @@ Authorization: Bearer {token}
 
 | 字段名 | 中文名称 | 说明 |
 |-------|---------|------|
-| predicted_price | 预测价格 | 模型预测价格 |
+| prediction_model | 定价模型来源 | 成功时为 `xgboost_daily` |
+| predicted_price | 预测价格 | 日级模型锚定日预测价格 |
 | price_range | 价格区间 | 建议价格范围 |
 | price_range.lower | 下限 | 建议价格下限 |
 | price_range.upper | 上限 | 建议价格上限 |
@@ -787,7 +820,7 @@ Authorization: Bearer {token}
 
 **接口**: `GET /api/predict/competitors/{unit_id}`
 
-**功能描述**: 获取指定房源的同商圈竞品分析
+**功能描述**: 获取指定**平台房源**（`unit_id`）在同行政区的竞品分析；选池为**按收藏数降序**的 `limit` 条。相似度为七维**加权余弦**（见 `position.methodology`）。与 **3.5.2a 表** 中「我的房源」竞品接口不是同一算法。**当前前端业务页未调用**，仅保留 OpenAPI/后端能力。
 
 **路径参数**:
 
@@ -832,7 +865,8 @@ Authorization: Bearer {token}
   "position": {
     "price_rank": 15,
     "price_percentile": 65.2,
-    "rating_rank": 8
+    "rating_rank": 8,
+    "methodology": "（见接口说明，含相似度与分位定义）"
   }
 }
 ```
@@ -848,7 +882,8 @@ Authorization: Bearer {token}
 | market_analysis | 市场分析 | 市场整体情况 |
 | position | 市场定位 | 目标房源在市场中的位置 |
 | price_rank | 价格排名 | 价格在竞品中的排名 |
-| price_percentile | 价格百分位 | 价格所处百分位 |
+| price_percentile | 价格百分位 | 目标价与**本响应竞品价**合并集合中的分位（名次/总数×100） |
+| methodology | 口径说明 | 文本：加权余弦维度与分位计算；勿与 my-listings 竞品混读 |
 
 ---
 
@@ -1263,6 +1298,17 @@ GET /api/health
 |-----|------|---------|
 | v2.0 | 2026-03-19 | 重构数据层，接入真实Hive数据，新增我的房源模块 |
 | v1.0 | 2025-12 | 初始版本，Mock数据实现 |
+
+### 8.1 工程变更记录（迭代摘要）
+
+| 日期 | 主题 | 摘要 |
+|------|------|------|
+| 2026-04 | 经营驾驶舱整合分析页 | 前端侧栏取消独立「商圈分析」；能力并入 `/dashboard` Tab（市场总览 / 商圈名录 / 设施溢价）；`/analysis` → `/dashboard?tab=districts`。 |
+| 2026-04 | 我的房源竞品相似度 | `GET /api/my-listings/{id}/competitors` 的 `similarity_score` 改为价格+卧室/床/人数/面积分项加权；缺失维度自动重加权；列表按相似度降序、距离升序。 |
+| 2026-04 | 竞品情报 UI | 「周边竞品」地图钉 Tooltip 改为展示后端 `selection_note`，与选取逻辑一致。 |
+| 2026-04 | 设施溢价说明 | 驾驶舱「设施溢价」Tab 增加口径与 Tooltip；本规范 3.4.2 补充方法论。 |
+| 2026-04 | 采集脚本写库 | `deploy/calendar_spider.py` 可选实时写入 MySQL `listings` / `price_calendars`（`spider_mysql_sync.py`，`DATABASE_URL` 等）。 |
+| 2026-04 | 竞品与相似度口径 | 新增 **3.5.2a** 两套竞品对照表；`predict/competitors` 修正加权余弦、补全 Listing 特征维、分位含目标价；`position.methodology`、`market_position.price_percentile_methodology`；`listings/{id}/similar` 相似度改为相对价差并在 schema 说明。 |
 
 ---
 
